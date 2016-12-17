@@ -1,4 +1,4 @@
-\documentclass[article,type=bsc,colorback,accentcolor=tud9c]{tudthesis}
+\documentclass[article,type=bsc,colorback,accentcolor=tud11d]{tudthesis}
 \usepackage{ngerman}
 
 \usepackage{varwidth}
@@ -34,9 +34,9 @@
 % Meta Data for the title page
   \thesistitle{Optimierte Zusammenarbeit von HTTP/2 und Multipath-TCP-Schedulern}{Optimizing Cooperation of HTTP/2 and the Multipath TCP Scheduler}
   \author{Maxi Weller}
-  \referee{aaaaa}{bbbb}[c]
+  \referee{Prof. Ralf Steinmetz}{Alexander Frömmgen}
   \department{Fachbereich Informatik}
-  \group{KOM - Multimedia Communications Lab }
+  \group{Multimedia Communications Lab }
   \tuprints{57580}{5758}
   \makethesistitle
   \affidavit{M. Weller}
@@ -77,7 +77,7 @@ related work
 
 
 
-\section{Multipath Scheduler Approaches}
+\section{Approaches for optimization}
 
 Several optimization approaches are considered in this chapter.
 
@@ -114,31 +114,80 @@ After these high priority resources are sent out, a regular, more bandwidth cons
 The transmitting application signals the state of its outgoing buffers to the scheduler. An interesting condition occurs when the HTTP server has no more data to send, and only a few segments are left in the scheduler's queue. This means only these few segments are missing so that a complete web page can be rendered for the user. The scheduler can try to push out the missing segments more aggressively: By temporarily ignoring the available congestion window for the left over bytes, or by retransmitting on all available subflows.
 
 
+
+\section{Choosing a web server platform}
+
+To get information about the contents of the HTTP/2 application data, the cooperation of the web server is required.
+
+
+
 \section{Implementation}
 
+The scheduler algorithms are implemented in a scripting language. The scripts are just-in-time compiled and interpreted by the Rule Based Scheduler.
 
 
-For evaluation, the algorithms are implemented in the scripting language of the Rule Based Scheduler. 
-The scripts are compiled to byte code and loaded into the kernel.
 
 \begin{figure}[b]
 \includegraphics[width=1\textwidth]{http2-awb-layers.pdf}
   \caption{The annotated data's path through the application and network layer}
 \end{figure}
 
+
+
+\section{Evaluation}
+One has to decide which web sites to measure, and how to measure them.
+
+
+\subsection{Selection of sample web pages}
+
+
+- Self built test pages (plain html, small html file with many scripts/css, big html, etc ...)
+
+
+Measuring the page load times of real-world web pages:
+
+- Alexa Top Sites (or similar ranking)
+
+- Hand-selected sites with interesting features / problems / optimization potentials
+
+- Sites which are often used on mobile
+
+
+\subsection{Handling dynamic and third party requests}
+
+Downloading web pages with browser / wget and delivering with nghttpd - Problem: how to handle dynamic or third-party requests?
+
+\begin{itemize}
+\item Cancel/reject all third party requests (in-browser / iptables)
+
+Pro: Easy, reproducible
+
+Con: not realistic (always a lot faster than real request)
+
+Pro: might be faster by the same amount, so still comparable (?)
+
+\item Let all third party requests through to the original sites
+
+Pro: Easy, realistic
+
+Con: dependent on network condition of test computer and load on original server (not reproducible)
+
+\end{itemize}
+
+Alternative: Use a caching HTTP/2 proxy (nghttpx, apache)
+
+Pro: realistic (?), reproducible, (not that difficult either)
+
+Con: ...
+
+
+
 \section{HTTP/2}
 
 
 \subsection{Page Load Speed Measurements}
 
-Measuring the page load times of real-world web pages
 
-One has to decide which web sites to measure, and how to measure them.
-
-Regarding the choice of web sites, an easy way is using a list of the most popular websites like the Alexa Top Sites.
-
-
-There are different approaches to choose which web sites to measure, and 
 
 
 
