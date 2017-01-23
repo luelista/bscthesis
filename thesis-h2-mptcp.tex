@@ -280,6 +280,10 @@ http://http2.github.io/http2-spec/index.html\#StreamStates
 \end{tikzpicture}
 
 
+\section{Security Considerations}
+The information passed from the HTTP server to the MPTCP scheduler creates a side channel bypassing TLS encryption. It needs to be considered whether the passed data or the observable scheduler decisions based on this data could help an adversary. Some information are only protected by HTTP/2 and would be exposed on HTTP/1.1 connections anyway, like the length of individual resources. Others, like the content type, might be not available to the attacker otherwise.
+
+
 
 \renewcommand\refname{References}
 \bibliography{thesis-h2-mptcp}{}
