@@ -75,6 +75,9 @@ related work
 \cite{Raisinghani_2004}
 \cite{nowlan2012unorderedtcp}
 
+\section{Multipath TCP}
+
+\section{HTTP 2}
 
 
 \section{Approaches for optimization}
@@ -188,7 +191,7 @@ Con: ...
 \subsection{Page Load Speed Measurements}
 
 
-
+\includegraphics{chrome-tracing-api.png}
 
 
 \subsection{Streams}
@@ -282,6 +285,12 @@ http://http2.github.io/http2-spec/index.html\#StreamStates
 
 \section{Security Considerations}
 The information passed from the HTTP server to the MPTCP scheduler creates a side channel bypassing TLS encryption. It needs to be considered whether the passed data or the observable scheduler decisions based on this data could help an adversary. Some information are only protected by HTTP/2 and would be exposed on HTTP/1.1 connections anyway, like the length of individual resources. Others, like the content type, might be not available to the attacker otherwise.
+
+\section{Outlook / Future Work}
+
+
+
+\section{Conclusion}
 
 
 
