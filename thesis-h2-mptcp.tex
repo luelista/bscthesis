@@ -1,11 +1,22 @@
 \documentclass[bigchapter,type=bsc,colorback,accentcolor=tud11d]{tudthesis}
 
+%--------------------------------------------------------
+% shows reference keys
+%--------------------------------------------------------
+%TODO: remove for final
+%\usepackage{showkeys}
+
+%--------------------------------------------------------
 % provides the todo command
-\usepackage{todonotes}
-\newcommand\todoin[2][]{\todo[inline, caption={2do}, #1]{
-\begin{minipage}{\textwidth-4pt}#2\end{minipage}}}
+%--------------------------------------------------------
+\newcommand\todob[1]{{\color{red}\fbox{
+\begin{minipage}{\textwidth-4pt}\texttt{ TODO: #1 }\end{minipage}}}}
 
+\newcommand\todo[1]{{\color{red}\fbox{\texttt{\footnotesize TODO: #1}}}}
 
+%--------------------------------------------------------
+% more package references
+%--------------------------------------------------------
 %\usepackage{ngerman}   ...ist ja gar nicht auf deutsch!
 \usepackage{booktabs}
 \usepackage{tabularx}
@@ -17,6 +28,7 @@
 \usepackage{graphicx}
 \usepackage{wrapfig}
 
+
 %\usepackage{parskip}
 
 % new page for each section
@@ -27,12 +39,19 @@
 \usepackage{tikz}
 \usetikzlibrary{shapes,arrows,positioning,automata}
 
+%--------------------------------------------------------
+% configuration
+%--------------------------------------------------------
+
+\bibliographystyle{IEEEtran}
+
 \setlength{\parskip}{0.75\baselineskip}%
 %\setlength{\parindent}{0pt}%
 
 % increase line height
 \renewcommand{\baselinestretch}{1.2} 
 
+\newcommand\code[1]{\texttt{#1}}
 
 % german month for TUDthesis
 \newcommand{\getmydate}{%
@@ -44,9 +63,15 @@
 	\fi\ \number\year%
 }
 
-%--------------------------------------------------------------------------------
+
+
+%=================================================================================
+% start of document
+%=================================================================================
 
 \begin{document}
+
+
 
 
 %=====================================================================
@@ -67,6 +92,10 @@
 \begin{abstract}
 %=====================================================================
 
+Multipath TCP is an extension to the Transmission Control Protocol to support the use of multiple paths between hosts with multiple interfaces.  There are several algorithms to schedule data segments over multiple paths, each making a different trade-off between throughput, resource utilization, reliability, delay and jitter. Even though Multipath TCP has is fully backwards compatibility towards the applications layer, %\cite{RFC6182}
+we can reap performance benefits by enabling the application to select a scheduling algorithm based on its internal information about content types, priorities, dependencies and user expectations.
+Therefore, we modify a HTTP/2 web server to pass scheduling hints to the Multipath TCP scheduler via socket options. The scheduling algorithms are developed in a scripting language for easier evaluation.
+An evaluation is performed in simulated and real-world environments over LTE and WiFi.
 
 
 \end{abstract}
@@ -79,8 +108,6 @@
 %=====================================================================
 
 \tableofcontents
-
-
 
 
 
@@ -126,7 +153,7 @@ Inherent in Multipath TCP operation is some overhead of discovering and establis
 % very short intro to http/2, maybe difference to http/1(.1)
 % "`websites become more intricate"'
 The web has come a long way since the introduction of HTTP/0.9 in 1993. Many small improvements have been made in the meantime, all carefully providing backward compatibility. But web applications have become so intricate, and users so accustomed to responsive interactive services, that a clear break had to be made. Therefore, HTTP/2 \cite{RFC7540_HTTP2} has been specified. To allow easier adaption, the semantics were kept intact, while the underlying protocol was changed completely: A only seemingly simple text-based protocol was replaced with a more efficient, precisely specified binary protocol. 
-The new feature most relevant to us are multiplexed streams which allow all data to be transferred over few, long-lived, thus more efficient TCP connections. The multiplexing also prevents head-of-line blocking and allows prioritizing the most time-critical ressources.
+The new feature most relevant to us are multiplexed streams which allow all data to be transferred over few, long-lived, thus more efficient TCP connections. The multiplexing also prevents head-of-line blocking and allows prioritizing the most time-critical resources.
 
 % two schedulers (
 % - http2 schedules frames from multiple streams into one tls/tcp connection, mostly based on http2 priority;
@@ -134,7 +161,7 @@ The new feature most relevant to us are multiplexed streams which allow all data
 % )
 % three layers
 
-As opposed to older versions, HTTP/2 is based on long-lived TCP connections. Therefore it can utilize the additional subflow capacity more often. During a single connection, different types of requests are processed, including loading a document and resources required to display it, loading auxilliary content like images below the fold, and user-initiated AJAX requests. Every type of request has different performance needs, which makes it especially interesting for cooperation-based optimization approaches.
+As opposed to older versions, HTTP/2 is based on long-lived TCP connections. Therefore it can utilize the additional sub-flow capacity more often. During a single connection, different types of requests are processed, including loading a document and resources required to display it, loading auxiliary content like images below the fold, and user-initiated AJAX requests. Every type of request has different performance needs, which makes it especially interesting for cooperation-based optimization approaches.
 
 % different scheduling approaches for mptcp are possible, many have been proposed and some are implemented in the linux kernel
 
@@ -142,13 +169,13 @@ As opposed to older versions, HTTP/2 is based on long-lived TCP connections. The
 % even for one given protocol, these requirements can change during a connection (e.g. web site: initial loading should be fast - user is waiting - use fastest flow(s)/use redundancy, loading of images below the fold don't need to be as fast -> conserve power/metered traffic, ajax requests might be small, but latency critical -> redundancy)
 We assume that choosing the best possible Multipath TCP subflow scheduling strategy depends on information about the higher layers. In the case of HTTP/2 connections this information includes the type of the request as indicated above. For having this information available to the packet scheduler - part of the transport layer - there are several possible solutions, each coming with different pros and cons. 
 % for some protocols, a good heuristical approach can be chosen based on transmitted bytes, time, transmission pauses, etc
-For one, a heuristical approach can be chosen, which acts on metadata readily available in the transport layer, including transmission rate and pauses, elapsed time, and byte and packet counters. \todoin{pro/con heuristic}
+For one, a heuristic approach can be chosen, which acts on metadata readily available in the transport layer, including transmission rate and pauses, elapsed time, and byte and packet counters. The good thing is that this approach is independent of the specific implementation of the application protocol, and can even work unchanged for several similar protocols. 
 % for some protocols, the scheduler could look into the octet stream and decide depending on contents
 % problems:
 % -> breaks separation of layers - high "`dirty hack"' factor
 % -> protocol decoding needs to be implemented in scheduler (os kernel!) -> proto updates need kernel updates, security problems (protocol parser is huge attack surface)
 % -> impossible with encrypted protocols (not technically impossible, but would be very complicated and has performance hit)
-Even more information about the state of higher level protocols can be gained by inspecting the octet stream itself. This brings with it all problems of Deep Packet Inspection \todoin{references!!}..... It is also not applicable to HTTP/2 as all browsers implement it with forced TLS encryption, therefore this approach is not considered any further.
+Even more information about the state of higher level protocols can be gained by inspecting the octet stream itself. This brings with it all problems of Deep Packet Inspection, including security risks and increased code complexity \cite{Porter2005}. It is also not applicable to HTTP/2 as all browsers implement it with forced TLS encryption, therefore this approach is not considered any further.
 % solution / our approach: the implementation of the higher level protocol provides special scheduling hints to the mptcp scheduler
 % pro
 % - no detailed knowledge about the protocol is neccessary in the scheduler
@@ -156,22 +183,26 @@ Even more information about the state of higher level protocols can be gained by
 % contra
 % - every application which should take advantage of this approach needs to be specifically modified
 % - 
-The middle road we suggest is providing an API, which allows the application to provide scheduling hints to the transport layer. This has the advantage of not embedding knowledge about the application layer protocol in the scheduler, thereby maintaining the partitioning of abstraction layers.
+The middle road we suggest is providing an API which allows the application to provide scheduling hints to the transport layer. This has the advantage of not embedding knowledge about the application layer protocol in the scheduler, thereby keeping the abstraction layers separate.
 
 
 %---------------------------------------------------------------------
 \section{Approach}
 %---------------------------------------------------------------------
 
-The Multipath TCP implementation \cite{multipathtcp} consists of three major building blocks: path manager, packet scheduler and connection to the subflows \cite{RFC6182}. In this thesis, we pay special attention to the packet scheduler. More precisely, we concentrate on its component which decides on which subflow to transmit a packet. 
-
-%interaction / dependency -> lösen durch cooperation
+%\todob{conceptual approach}
 %wie vorgehen - konzeptioneller approach
-%
+%interaction / dependency -> lösen durch cooperation
+We start by analyzing the general structure of popular web sites regarding the resources on the critical path. In comparison, we look at guidelines for performance optimization in web design. 
+From the gained insights, we conceive possible optimizations for existing, modified or specially crafted web pages at the transport level. The Multipath TCP implementation \cite{multipathtcp} consists of three major building blocks: path manager, packet scheduler and connection to the subflows \cite{RFC6182}. In this thesis, we pay special attention to the packet scheduler. More precisely, we concentrate on its component which spreads individual segments over subflows. These optimized schedulers are implemented in rule-based scripts which are loaded into the MPTCP implementation in the Linux kernel. To make scheduling hints like content type, priorities or dependencies available to the scheduler scripts, we modify a suitable HTTP/2-capable web server to pass on these hints as socket options. 
+
 %auch implement. und eval approach
+The next step is an evaluation of the implemented optimizations in simulated network environments. Web sites are loaded in network scenarios differing in bandwidth, round trip time and packet loss. To study the practicality, we conduct real-world measurements for the best-performing optimizations, connecting from LTE and domestic ADSL access networks to virtual servers at a cloud provider. 
 
 
-\todoin{TODO}
+
+%
+
 
 %---------------------------------------------------------------------
 \section{Structure}
@@ -220,7 +251,7 @@ Finally, a conclusion is drawn on the accomplished improvements, which approache
 
 \section{Transport Layer - Multipath TCP}
 
-This section provides the neccessary background on the "`TCP Extensions for Multipath Operation with Multiple Adresses"', in short Multipath TCP.
+This section provides the necessary background on the "`TCP Extensions for Multipath Operation with Multiple Adresses"', in short Multipath TCP.
 
 The current reference implementation is a patch set to the Linux kernel maintained by the Université Catholique de Louvain\cite{multipathtcp}. Further known implementations are in Apple iOS 7, for FreeBSD and in some proprietary network appliances.
 
@@ -231,10 +262,10 @@ The current reference implementation is a patch set to the Linux kernel maintain
 \begin{table}%
 		\begin{tabular}{ll} \toprule
 		Device Type    & Network Interfaces \\ \midrule
-		smart phones & cell+wifi \\
-		notebooks & wifi(+eth)(+cell) \\
-		desktops & eth(+wifi) \\
-		household routers with multi uplink & dsl(+lte) \\ \bottomrule
+		smart phones & Wi-Fi and cellular \\
+		notebooks & Wi-Fi, often Ethernet, sometimes cellular \\
+		desktops & Ethernet and/or Wi-Fi \\
+		household routers with multiple uplinks & DSL and cellular (LTE) \\ \bottomrule
 		\end{tabular}
 		\caption{Typical network interfaces of common device types}
 		\label{}
@@ -242,14 +273,17 @@ The current reference implementation is a patch set to the Linux kernel maintain
 
 
 
-\begin{wrapfigure}{r}{0.45\textwidth}
-	\includegraphics[width=0.4\textwidth]{mptcp-functional-decomposition.pdf}
+\begin{figure}
+	\includegraphics[width=0.9\textwidth]{mptcp-functional-decomposition.pdf}
 	\caption{Interaction of the functional building blocks of Multipath TCP as described in }
-\end{wrapfigure}
+\end{figure}
 
 
 \subsection{Optimizing Multipath TCP Scheduling}
 
+
+
+\subsection{Rule-Based Scheduler}
 
 
 % subflow attributes
@@ -368,6 +402,19 @@ research: what kinds of information that one layer has available, could provide 
 %=====================================================================
 
 
+	
+%Annahmen:
+We will describe a few assumptions made for the implementation and all optimizations.
+%TCP-Verbindung wird immer vom Browser aufgebaut
+First, we always look at a MPTCP connection which is established by the web browser and accepted by the web server. This is always the case for HTTP connections.
+%Nur der Client/Browser hat mehrere Interfaces / sendet MP JOIN Anfragen -> path-manager erstmal nicht relevant
+Only the client has two interfaces with different network addresses. After the connection is set up, it directly opens the second subflow by connecting to the server from the secondary interface with a \code{MP\_JOIN} option in the \code{SYN}. The server has only one (visible) interface and accepts the second subflow. Therefore we won't discuss different MPTCP path management algorithms.
+%Client hat zwei Interfaces (Wi-Fi und 3G)
+The client's interfaces are either Wi-Fi and 3G/LTE, as found on smart phones, or Ethernet and Wi-Fi, which is common for notebooks.
+%Kontrollierbare Aspekte: 
+%	- Scheduler
+%	- TCP Flow Control/Congestion Control
+
 
 
 
@@ -380,9 +427,15 @@ research: what kinds of information that one layer has available, could provide 
 %Wie dem Scheduler mitteilen was er tun soll?
 %Problem: Wie erfolgt Kommunikation mit dem mptcp-scheduler? Zwischen mptcp und http2 sitzt in der regel noch tls! -> Paketinhalt für mptcp-scheduler nicht lesbar - evtl. über byte-counter
 
+
 %Wo kommt die Logik hin?
 %	- a: Server taggt Frames irgendwie, z.B. Inhalt=PageContent / Bild / Script / Style; Push=Ja/Nein; etc…, und Scheduler enthält die Logik die sagt was mit welchem Frame-Typ passieren soll
 %oder b: Server gibt genaue Anweisung an Scheduler, dieser setzt es nur um
+A decision we need to make is where to place the optimization logic. One approach is that the server tags every HTTP/2 frame with information like content or stream type, and the scheduler script decides that to do exactly. This way, there is maximum flexibility for the MPTCP configuration and the server doesn't need to know very much about MPTCP. On the other hand, we need special handling on the scheduler level for every application protocol we want to optimize.
+The other approach is to have several general scheduler algorithms, each with different performance trade-offs, while allowing the application to decide which scheduler algorithm should be enabled. This reduces the dependencies on the scheduler level, but required more MPTCP specific decision making on the application level. 
+
+
+
 
 
 \section{Optimizing the Multipath TCP scheduler}
@@ -394,7 +447,7 @@ Many modern web pages consist of dozens of resources. They can be classified by 
 
 1. The \textit{Document} is the main HTML file which is loaded first. It is strictly necessary for the browser to render the page, and to load subsequent resources. 
 
-2. Synchronous Javascript resources (\texttt{<script>} tags) are required by the browser to construct the Document Object Model (DOM) tree. They must be loaded as soon as the tag is parsed by the browser.
+2. Synchronous Javascript resources (\code{<script>} tags) are required by the browser to construct the Document Object Model (DOM) tree. They must be loaded as soon as the tag is parsed by the browser.
 
 3. Style sheets are needed for the first layout cycle of the page, which means usually nothing is displayed to the user until they are fully loaded.
 
@@ -452,7 +505,7 @@ The information passed from the HTTP server to the MPTCP scheduler creates a sid
 \subsection{Scheduler}
 
 
-The scheduler algorithms are implemented in a scripting language. The scripts are just-in-time compiled and interpreted by the Rule Based Scheduler.
+The scheduler algorithms are implemented in a scripting language. The scripts are just-in-time compiled and interpreted by the Rule Based Scheduler, a byte-code based virtual machine running in the MPTCP implementation in the Linux kernel.
 
 
 
@@ -460,6 +513,27 @@ The scheduler algorithms are implemented in a scripting language. The scripts ar
 
 
 
+
+
+\section{Application Layer - HTTP 2}
+
+
+\subsection{Choosing a web server platform}
+
+To get information about the contents of the HTTP/2 application data, the cooperation of the web server is required.
+
+Multiple web servers have been evaluated and based on the criteria set out below, a suitable implementation basis has been selected.
+
+As we want to implement low-level modifications in the web server, the source code has to be available, and the license must permit modifications. This is a strictly necessary criterion, but luckily, most available web servers are permissively open source licensed under Apache, MIT or similar licenses.
+
+To be at all useful, the server must support HTTP/2, and support it with at least one common browser as client. 
+
+To make the work more relevant for practical use, a popular web server should be used. Therefore, we started our evaluation with the Apache HTTP Server
+
+
+\subsubsection{nghttpd}
+
+.....
 
 \begin{tikzpicture}[->,>=stealth',shorten >=1pt,auto,node distance=1.1cm,
 		semithick]
@@ -508,18 +582,6 @@ The scheduler algorithms are implemented in a scripting language. The scripts ar
 
 
 \end{tikzpicture}
-
-
-
-
-\section{Application Layer - HTTP 2}
-
-
-
-\section{Choosing a web server platform}
-
-To get information about the contents of the HTTP/2 application data, the cooperation of the web server is required.
-
 
 
 
@@ -632,7 +694,6 @@ Con: ...
 \subsection{Mininet}
 
 
-\subsection{}
 
 
 \section{Real world measurements}
@@ -684,7 +745,7 @@ Some optimizations rely on manually providing resource priorities and dependenci
 \nocite{*}
 
 \bibliography{thesis-h2-mptcp}{}
-\bibliographystyle{plain}
+
 
 
 
