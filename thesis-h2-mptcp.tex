@@ -28,7 +28,7 @@
 \usepackage{graphicx}
 \usepackage{wrapfig}
 
-
+\usepackage{biblatex}
 %\usepackage{parskip}
 
 % new page for each section
@@ -43,7 +43,8 @@
 % configuration
 %--------------------------------------------------------
 
-\bibliographystyle{IEEEtran}
+%\bibliographystyle{IEEEtran}
+\bibliography{thesis-h2-mptcp}
 
 \setlength{\parskip}{0.75\baselineskip}%
 %\setlength{\parindent}{0pt}%
@@ -115,7 +116,6 @@ An evaluation is performed in simulated and real-world environments over LTE and
 %=====================================================================
 \chapter{Introduction}
 %=====================================================================
-
 
 In the following paragraphs, we describe the motivation for the relatively recent protocols this work is based on as well as for the kind of optimizations that will be implemented in this thesis. We introduce the approach and give an overview of the remaining chapters.
 
@@ -251,9 +251,39 @@ Finally, a conclusion is drawn on the accomplished improvements, which approache
 
 \section{Transport Layer - Multipath TCP}
 
-This section provides the necessary background on the "`TCP Extensions for Multipath Operation with Multiple Adresses"', in short Multipath TCP.
+%
+%http://www.ip-insider.de/anwendungen-und-konkurrenz-fuer-multipath-tcp-a-445245/
+%\cite{IpInsiderMptcp}
 
-The current reference implementation is a patch set to the Linux kernel maintained by the Université Catholique de Louvain\cite{multipathtcp}. Further known implementations are in Apple iOS 7, for FreeBSD and in some proprietary network appliances.
+Two pipes are better than one - that's Multipath TCP in a nutshell. In this case, a pipe is a distinct path between two devices, identified by the IP adresses of both peers. Combining multiple of these subflows can provide several advantages. Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow breaks down, the backup takes over seamlessly. On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows. 
+
+This section covers the background knowledge on Multipath TCP which is required for the remaining work.
+
+%tuple of (source address, source port, destination address, destination port).
+
+\begin{figure}
+	\includegraphics[width=0.9\textwidth]{mptcp-functional-decomposition.pdf}
+	\caption{Interaction of the functional building blocks of Multipath TCP as described in \cite{RFC6182}}
+\end{figure}
+
+\subsection{}
+
+
+\subsection{Implementations}
+
+
+%reference(?) implementation in linux kernel
+The current reference implementation\footnote{\url{http://multipath-tcp.org/}} is based on the Linux kernel and maintained by a group at the Université Catholique de Louvain\cite{multipathtcp}. 
+%other implementations
+The most widely deployed implementation is found in Apple's XNU kernel \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
+%https://support.apple.com/en-us/HT201373
+Another implementation is developed as a patch for the FreeBSD kernel at Swinburne University \footnote{\url{http://caia.swin.edu.au/newtcp/mptcp/}}. The first implementation of Multipath TCP was developed as a user-space proxy\footnote{\url{https://www.ietf.org/mail-archive/web/multipathtcp/current/msg01934.html}} by Hampel at Bell Labs. All aforementioned software is open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
+
+
+\subsection{Socket API}
+
+%application api's
+In the current Linux implementation, the only user-space control is via \code{sysctl} parameters, allowing the system administrator to enable or disable Multipath TCP for all applications, and to change a number of high-level parameters globally. If enabled, Multipath TCP is used for all TCP connections and is transparent to the application. Application developers can't control details of the Multipath TCP behaviour. However, different APIs have been proposed and implemented to give individual, MPTCP-aware applications some control over subflow details. Scharf and Ford \cite{Scharf2013} present a "`Basic API for MPTCP-Aware Applications"', enabling applications to choose whether MPTCP should be used on a given socket, restrict the interfaces to use for establishing paths and query the subflows and their addresses. 
 
 
 
@@ -270,13 +300,6 @@ The current reference implementation is a patch set to the Linux kernel maintain
 		\caption{Typical network interfaces of common device types}
 		\label{}
 \end{table}
-
-
-
-\begin{figure}
-	\includegraphics[width=0.9\textwidth]{mptcp-functional-decomposition.pdf}
-	\caption{Interaction of the functional building blocks of Multipath TCP as described in }
-\end{figure}
 
 
 \subsection{Optimizing Multipath TCP Scheduling}
@@ -694,6 +717,11 @@ Con: ...
 \subsection{Mininet}
 
 
+\subsubsection{TCP Small Queue}
+
+During our evaluations with Mininet and comparisions on real hardware, we noticed that in Mininet the TCP Small Queue throttling never got engaged. 
+%https://kernelnewbies.org/Linux_3.6#head-b1e33c4c78affb4186e5affc4b4a2bc7d44a3e66
+%https://lwn.net/Articles/507065/
 
 
 \section{Real world measurements}
@@ -742,9 +770,10 @@ Some optimizations rely on manually providing resource priorities and dependenci
 %=====================================================================
 
 
-\nocite{*}
-
-\bibliography{thesis-h2-mptcp}{}
+%\nocite{*}
+%\chapter{Bibliography}
+%\bibliography{thesis-h2-mptcp}{}
+\printbibliography
 
 
 
