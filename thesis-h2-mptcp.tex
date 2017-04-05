@@ -216,7 +216,7 @@ In the following chapter, we introduce the protocols on which this work is based
 Chapter four starts with an analysis of typical web page structures, details our approach for passing scheduling hints from application to transport layer and presents optimized MPTCP scheduler rules for different network scenarios. We also consider security concerns regarding the scheduling hints as a side channel to TLS encryption.
 
 %implementation
-Following our approach of integrating multiple layers, the implementation described in chapter five ranges from the network layer up to the application layer. Optimized schedulers were realized with a scripting-enabled rule based scheduler in the Linux kernel. After conducting a survey of web server software, we choose one to customize. This is necessary to pass information about HTTP requests down the stack, bypassing encryption. On top of that, we created sample web pages and applications.
+Following our approach of integrating multiple layers, the implementation described in chapter five ranges from the network layer up to the application layer. Optimized schedulers were realized with a scripting-enabled rule based scheduler in the Linux kernel. After conducting a survey of web server software, we choose one to customize. This is necessary to pass information about HTTP transactions down the stack, bypassing encryption. On top of that, we created sample web pages and applications.
 
 
 %evaluation
@@ -257,34 +257,74 @@ Finally, a conclusion is drawn on the accomplished improvements, which approache
 
 Two pipes are better than one - that's Multipath TCP in a nutshell. In this case, a pipe is a distinct path between two devices, identified by the IP adresses of both peers. Combining multiple of these subflows can provide several advantages. Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow breaks down, the backup takes over seamlessly. On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows. 
 
-This section covers the background knowledge on Multipath TCP which is required for the remaining work.
+This section covers the background knowledge on Multipath TCP which is required for the remaining work. We start by enumerating the current software implementations of Multipath TCP and giving some information on its current deployment. Following that, we describe the architecture of protocol and implementations. We present studies evaluating and optimizing Multipath TCP performance, and proposals and implementions of interfaces to the application layer. To finish this section, we explain the rule-based scheduler, a Multipath TCP packet scheduler, which makes its decisions based on script programs which are changeable during runtime, allowing us to evaluate different scheduling approaches faster.
 
 %tuple of (source address, source port, destination address, destination port).
+
+
+
+\subsection{Implementations and Deployment}
+%We start by enumerating the current software implementations of Multipath TCP and giving some information on its current deployment.
+
+%reference(?) implementation in linux kernel
+The current reference implementation\footnote{\url{http://multipath-tcp.org/}} is based on the Linux kernel and maintained by \textcite{multipathtcp} at the Université Catholique de Louvain. A similar patch for the FreeBSD kernel has been developed at Swinburne University\footnote{\url{http://caia.swin.edu.au/newtcp/mptcp/}}.
+%https://support.apple.com/en-us/HT201373
+ The first implementation of Multipath TCP was developed as a user-space proxy\footnote{\url{https://www.ietf.org/mail-archive/web/multipathtcp/current/msg01934.html}} by Hampel at Bell Labs. All aforementioned software is open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
+%other implementations
+The most widely deployed implementation is found in Apple's XNU kernel \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the Siri personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
+\textcite{Bonaventure2016Deploy} report a similar use by some cellular network operators. Hardware vendors include the Multipath TCP implementation in the Linux kernel of their Android phones. The cellular provider provides a SOCKS proxy server at carrier level. Together with a SOCKS proxy in the Android operating system, both using Multipath TCP, this allows combining Wi-Fi and cellular connectivity over existing infrastructure. 
+
+
+\subsection{Architecture of Multipath TCP}
+%Following that, we describe the architecture of the Multipath TCP protocol and implementation. 
 
 \begin{figure}
 	\includegraphics[width=0.9\textwidth]{mptcp-functional-decomposition.pdf}
 	\caption{Interaction of the functional building blocks of Multipath TCP as described in \cite{RFC6182}}
 \end{figure}
 
-\subsection{}
+\subsubsection{Path Management}
 
 
-\subsection{Implementations}
+
+\subsubsection{Packet Scheduling}
 
 
-%reference(?) implementation in linux kernel
-The current reference implementation\footnote{\url{http://multipath-tcp.org/}} is based on the Linux kernel and maintained by a group at the Université Catholique de Louvain\cite{multipathtcp}. 
-%other implementations
-The most widely deployed implementation is found in Apple's XNU kernel \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
-%https://support.apple.com/en-us/HT201373
-Another implementation is developed as a patch for the FreeBSD kernel at Swinburne University \footnote{\url{http://caia.swin.edu.au/newtcp/mptcp/}}. The first implementation of Multipath TCP was developed as a user-space proxy\footnote{\url{https://www.ietf.org/mail-archive/web/multipathtcp/current/msg01934.html}} by Hampel at Bell Labs. All aforementioned software is open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
+
+
+\subsubsection{TCP Subflows}
+
+
+\subsection{Multipath TCP on the Wire}
+
+Great care was taken in the specification of Multipath TCP to maintain compatibility with regular TCP, not only but especially towards the network layer. This was done with regard to the deploying it in the current Internet, which means coping with network address translators, firewalls and other middleboxes.
+Therefore, Multipath TCP subflows look and behave on the wire exactly like regular TCP flows, except the segments contain some additional TCP options as described in RFC 6824 \cite{RFC6824_MPTCP}.
+
+When a new Multipath TCP connection is set up, the \textbf{MP\_CAPABLE} option is included in the SYN segment. From this options, the server learns that the new client supports MPTCP. In the responding SYN-ACK and ACK segments, the MP\_CAPABLE option is included as well, serving as a handshake, in which authentication keys are exchanged. These keys are later used in the process of adding more subflows to the connection.
+
+New subflows are initiated by establishing what looks like a regular TCP connection at to the network, but contains the \textbf{MP\_JOIN} option in the three-way handshake segments. The contents of this option depends on the stage of the handshake. The initiator sends an identifying token, which is based on the authentication keys.  In the first two segments, random numbers (nonces) are exchanged. To authenticate each other, the peers exchange HMACs of the concatenated nonces keyed on the concatenated authentication keys in the second and third segment.
+
+During the regular data transmission, the \textbf{DSS} option (Data Sequence Signal) is added to every segment. It contains sequence numbers and acknowledgements, which work very similar to their TCP counterparts. They are necessary to ensure ordered data transfer across subflows, and to retransmit segments in case of collapse of a subflow.
+
+
+\subsection{Performance Evaluations}
+%We present studies evaluating and optimizing Multipath TCP performance, [...]
+
 
 
 \subsection{Socket API}
+%We present [...] proposals and implementions of interfaces to the application layer.
 
 %application api's
-In the current Linux implementation, the only user-space control is via \code{sysctl} parameters, allowing the system administrator to enable or disable Multipath TCP for all applications, and to change a number of high-level parameters globally. If enabled, Multipath TCP is used for all TCP connections and is transparent to the application. Application developers can't control details of the Multipath TCP behaviour. However, different APIs have been proposed and implemented to give individual, MPTCP-aware applications some control over subflow details. Scharf and Ford \cite{Scharf2013} present a "`Basic API for MPTCP-Aware Applications"', enabling applications to choose whether MPTCP should be used on a given socket, restrict the interfaces to use for establishing paths and query the subflows and their addresses. 
+The only way to control the current Linux implementation from user-space was by setting \code{sysctl} parameters, which are generally valid for the entire operating system. They allow the system administrator to enable or disable Multipath TCP for all applications, and to change a number of high-level parameters globally. If Multipath TCP is enabled, it is used for all TCP connections and is transparent to the application. Recently, the socket option \code{MPTCP\_ENABLED} was introduced, which allows switching it on or off per socket. Still, application developers don't have any fine-grained control over the Multipath TCP behaviour.
 
+In contrast, the Apple implementation takes a very different approach by providing a new socket-based API. One the positive side, this gives Multipath TCP aware applications full control over Multipath TCP connections, setting up, enumerating and tearing down subflows. New \code{connectx} and \code{disconnectx} system calls are introduced for that reason. However, this makes it incompatible to existing applications, requiring developers to make modifications to take advantage of the new protocol.
+
+To allow similar fine-grained control, while keeping the compatibility with unadapted applications, several APIs have been proposed. 
+%RFC 6897
+\textcite{Scharf2013} present in RFC 6897 a "`Basic API for MPTCP-Aware Applications"', enabling applications to restrict the interfaces to use for establishing paths and to query the subflows and their addresses. 
+They also recommend that socket options on a Multipath TCP meta-socket should be, if possible, passed through to all subflow sockets.
+%Hesmans 2016 - An enhanced socket API for Multipath TCP
 
 
 
@@ -307,6 +347,7 @@ In the current Linux implementation, the only user-space control is via \code{sy
 
 
 \subsection{Rule-Based Scheduler}
+To finish this section on Multipath TCP, we give an introduction to the rule-based scheduler, a Multipath TCP scheduler, which makes its decisions based on interpreted script programs, allowing us to evaluate different scheduling approaches more straightforward.
 
 
 % subflow attributes
@@ -655,10 +696,10 @@ We have to decide which web sites to measure, and how to measure them.
 \section{Selection of sample web pages}
 
 
-- Self built test pages (plain html, small html file with many scripts/css, big html, etc ...)
+- Synthetic content / Self built test pages (plain html, small html file with many scripts/css, big html, etc ...)
 
 
-Measuring the page load times of real-world web pages:
+Measuring the page load times of real-world web pages (mirrored on special web server under our control. Mirroring is necessary for multiple reasons: First, to ensure repeatability of the results we don't want the load of the "`real"' web server and the network connection in between to compromise our measurement. Second, we need the web server to support HTTP/2, which is not too common, and MPTCP, which is extremely rare in the wild)
 
 - Alexa Top Sites (or similar ranking)
 
