@@ -1,4 +1,4 @@
-\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud11d]{tudthesis}
+\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud11b]{tudthesis}
 
 %--------------------------------------------------------
 % shows reference keys
@@ -248,19 +248,35 @@ Finally, a conclusion is drawn on the accomplished improvements, which approache
 %=====================================================================
 
 %related work
+In this chapter, we go through transport, presentation and application layer, the OSI layers this work is concerned with. For each layer, we explain the relevant protocols and implementations. We will also present previous work on the optimization and measurement of web page performance.
 
-\section{Transport Layer - Multipath TCP}
+
+\section{Transport Layer: Multipath TCP}
 
 %
 %http://www.ip-insider.de/anwendungen-und-konkurrenz-fuer-multipath-tcp-a-445245/
 %\cite{IpInsiderMptcp}
 
-Two pipes are better than one - that's Multipath TCP in a nutshell. In this case, a pipe is a distinct path between two devices, identified by the IP adresses of both peers. Combining multiple of these subflows can provide several advantages. Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow breaks down, the backup takes over seamlessly. On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows. 
+Two pipes are better than one - that's Multipath TCP in a nutshell. In this case, a pipe is a distinct path between two devices, identified by the IP adresses of both peers. Combining multiple of these subflows can provide several advantages. Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow stops working, the backup takes over seamlessly. On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows. 
 
 This section covers the background knowledge on Multipath TCP which is required for the remaining work. We start by enumerating the current software implementations of Multipath TCP and giving some information on its current deployment. Following that, we describe the architecture of protocol and implementations. We present studies evaluating and optimizing Multipath TCP performance, and proposals and implementions of interfaces to the application layer. To finish this section, we explain the rule-based scheduler, a Multipath TCP packet scheduler, which makes its decisions based on script programs which are changeable during runtime, allowing us to evaluate different scheduling approaches faster.
 
 %tuple of (source address, source port, destination address, destination port).
 
+
+% multiple network interfaces
+\begin{table}%
+		\begin{tabular}{ll} \toprule
+		Device Type    & Network Interfaces \\ \midrule
+		smart phones & Wi-Fi and cellular \\
+		notebooks & Wi-Fi, often Ethernet, sometimes cellular \\
+		desktops & Ethernet and/or Wi-Fi \\
+		servers & multiple Ethernet \\
+		household routers with multiple uplinks & DSL and cellular (LTE) \\ \bottomrule
+		\end{tabular}
+		\caption{Typical network interfaces of common device types}
+		\label{}
+\end{table}
 
 
 \subsection{Implementations and Deployment}
@@ -269,7 +285,7 @@ This section covers the background knowledge on Multipath TCP which is required 
 %reference(?) implementation in linux kernel
 The current reference implementation\footnote{\url{http://multipath-tcp.org/}} is based on the Linux kernel and maintained by \textcite{multipathtcp} at the Université Catholique de Louvain. A similar patch for the FreeBSD kernel has been developed at Swinburne University\footnote{\url{http://caia.swin.edu.au/newtcp/mptcp/}}.
 %https://support.apple.com/en-us/HT201373
- The first implementation of Multipath TCP was developed as a user-space proxy\footnote{\url{https://www.ietf.org/mail-archive/web/multipathtcp/current/msg01934.html}} by Hampel at Bell Labs. All aforementioned software is open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
+ The first implementation of Multipath TCP was developed as a user-space proxy\footnote{\url{https://open-innovation.alcatel-lucent.com/projects/mptcp-proxy}} by Hampel at Bell Labs, and is no longer maintained. All aforementioned software is open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
 %other implementations
 The most widely deployed implementation is found in Apple's XNU kernel \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the Siri personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
 \textcite{Bonaventure2016Deploy} report a similar use by some cellular network operators. Hardware vendors include the Multipath TCP implementation in the Linux kernel of their Android phones. The cellular provider provides a SOCKS proxy server at carrier level. Together with a SOCKS proxy in the Android operating system, both using Multipath TCP, this allows combining Wi-Fi and cellular connectivity over existing infrastructure. 
@@ -283,16 +299,16 @@ The most widely deployed implementation is found in Apple's XNU kernel \cite{Hes
 	\caption{Interaction of the functional building blocks of Multipath TCP as described in \cite{RFC6182}}
 \end{figure}
 
-\subsubsection{Path Management}
+%\subsubsection{Path Management}
 
 
 
-\subsubsection{Packet Scheduling}
+%\subsubsection{Packet Scheduling}
 
 
 
 
-\subsubsection{TCP Subflows}
+%\subsubsection{TCP Subflows}
 
 
 \subsection{Multipath TCP on the Wire}
@@ -328,26 +344,14 @@ They also recommend that socket options on a Multipath TCP meta-socket should be
 
 
 
-% multiple network interfaces
-\begin{table}%
-		\begin{tabular}{ll} \toprule
-		Device Type    & Network Interfaces \\ \midrule
-		smart phones & Wi-Fi and cellular \\
-		notebooks & Wi-Fi, often Ethernet, sometimes cellular \\
-		desktops & Ethernet and/or Wi-Fi \\
-		household routers with multiple uplinks & DSL and cellular (LTE) \\ \bottomrule
-		\end{tabular}
-		\caption{Typical network interfaces of common device types}
-		\label{}
-\end{table}
-
 
 \subsection{Optimizing Multipath TCP Scheduling}
 
 
 
 \subsection{Rule-Based Scheduler}
-To finish this section on Multipath TCP, we give an introduction to the rule-based scheduler, a Multipath TCP scheduler, which makes its decisions based on interpreted script programs, allowing us to evaluate different scheduling approaches more straightforward.
+The rule-based scheduler by \textcite{RBS} is a Multipath TCP scheduler, which runs a small program for every scheduling decision. These programs can be written in a special scripting language and are compiled to a byte code, which is executed by a virtual machine in the scheduler. The possibility of dynamically loading the scheduling algorithms at runtime, without having to recompile the Linux kernel, allows us to evaluate different scheduling approaches quickly.
+
 
 
 % subflow attributes
@@ -367,10 +371,13 @@ To finish this section on Multipath TCP, we give an introduction to the rule-bas
 \end{table}
 
 
-\section{Presentation Layer - SSL}
+\section{Presentation Layer: SSL}
 
 
-\section{Application Layer - HTTP/2 and HTML}
+
+
+
+\section{Application Layer: HTTP/2 and HTML}
 
 \subsection{Optimizing HTTP}
 (web performance? http2 performance?)
