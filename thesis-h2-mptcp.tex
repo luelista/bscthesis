@@ -39,6 +39,8 @@
 \usepackage{tikz}
 \usetikzlibrary{shapes,arrows,positioning,automata}
 
+\usepackage{listings}
+
 %--------------------------------------------------------
 % configuration
 %--------------------------------------------------------
@@ -374,9 +376,18 @@ The rule-based scheduler by \textcite{RBS} is a Multipath TCP scheduler, which r
 
 \section{Presentation Layer: SSL}
 
+% why we need to consider ssl
+% - x% of connections use ssl today
+"`In September 2014, 44.3% of web connections already use HTTPS."'
+"`The growth of HTTPS adoption is striking, with the HTTPS ?ow share more than doubling in two years."'
+"`the “S” is here to stay"'
 
 OpenSSL will build a record from each call to SSL\_write
 https://www.imperialviolet.org/2010/06/25/overclocking-ssl.html
+
+
+
+"`the TLS standard provides a fast negotiation mechanism, which reduces the TCP+TLS handshake to 2 RTTs "' (session id)
 
 
 \section{Application Layer: HTTP/2 and HTML}
@@ -384,7 +395,7 @@ https://www.imperialviolet.org/2010/06/25/overclocking-ssl.html
 \subsection{Optimizing HTTP}
 (web performance? http2 performance?)
 \cite{klotski2015}
-(also, general article about HTTP/2 as optimization of http)
+(general article about HTTP/2 as optimization of http)
 \cite{RFC7540_HTTP2}
 
 \subsection{Streams}
@@ -678,29 +689,8 @@ To make the work more relevant for practical use, a popular web server should be
 \chapter{Evaluation}
 %=====================================================================
 
-
- overview of the chapter
-
- 1. decisions we made which have an impact on the evaluation:
-  -- using real web sites / hand-crafted sample web sites
-  -- if real web sites: which web sites to measure, how to prepare them for measurement
- - evaluation setup:
-  -- which browser to use for measurement
- - measured data points:
-  -- amount of data transmitted (overall, per interface/subflow)
-  -- complete page load time (onLoad)
-  -- load time of HTML Document
-  -- time to DOM Ready (doc + blocking scripts)
-  -- time to first render/paint
-  -- time to "`above the fold ready"' (this is probably the closest to user impression of load time)
-     - can be measured as the time of the last change above the fold
-  -- time to "`text ready"' (useful e.g. on newspaper sites where most users want to read the content only/first, but lot of slow crap is shown above the fold)
-
- 2. how the measurement is conducted (used browser, used additional scripts/extension to gather data from browser, additional scripts to gather transmitted data from network stack client/server side, automation, ...)
- -> this could as well go into Implementation???
-
- 3. results: data, graphs, observations, conclusions...
-
+We start this chapter by a presentation of the evaluation setup and the reasoning behind the choices. This includes the software used, the data points collected, and the web sites to test the optimizations on.
+Thereafter, the gathered data is presented and analyzed.
 
 
 % overview of the chapter
@@ -731,11 +721,11 @@ To make the work more relevant for practical use, a popular web server should be
 
 
 
-We have to decide which web sites to measure, and how to measure them.
 
 
 \section{Selection of sample web pages}
 
+We have to decide which web sites to measure.
 
 - Synthetic content / Self built test pages (plain html, small html file with many scripts/css, big html, etc ...)
 
@@ -755,6 +745,8 @@ Measuring the page load times of real-world web pages (mirrored on special web s
 % on some, changes are inevitable, they won't work otherwise (https neccessary for h2, problems with third-party requests and dynamic content, etc)
 % on some, we should change stuff, e.g. because there are optimizations for http/1.1 which make things worse on http/2 and it would be unrealistic to use them in this state
 % etc.
+
+
 
 \subsection{Handling dynamic and third party requests}
 
@@ -859,12 +851,81 @@ This further lead us to a code comment in the Linux kernel which says that this 
 
 \subsection{Evaluation A}
 % zeigen - implementiertung funktioniert grundsätzlich
-The goal of this evaluation is to test the implementation of content-type specific scheduling, and to show a simple but already useful optimization. The network situation is in Figure \ref{eva1-scenario}. A user with a smart phone is connected to a free Wi-Fi hotspot, which routes the traffic through a VPN and therefore incurs a high latency, and is also connected to a cellular network with low latency but metered traffic limits. The user loads a web page which is modelled after a typical news article, it consists of an HTML document referencing style sheet, script and images of different size. All styles and scripts are included in the \code{<head>} of the document and required for rendering the page. Some big images are included below the fold and are not required for the rendering.
-
-The scenario is first emulated in Mininet. Client and Server are modelled as Mininet hosts running the Google Chrome browser and the nghttpd web server, respectively. The network connection is represented by two Mininet links with delay and rate limiting 
-
-A client running a web browser connects to the web server. It is connected to the "`internet"' via two interfaces, one with low latency and medium bandwidth, and another with high latency, low bandwidth and metered traffic. 
 % simple ("`academic"') content-type specific scheduling
+
+The goal of this evaluation is to test the implementation of content-type specific scheduling, and to show a simple but already useful optimization. The network situation is in Figure \ref{eva1-scenario}. A user with a smart phone is connected to a free Wi-Fi hotspot, which routes the traffic through a VPN and therefore incurs a high latency, and is also connected to a cellular network with low latency but metered traffic limits. The user loads a web page which is modelled after a typical news article, it consists of an HTML document referencing style sheet, script and images of different size. All styles and scripts are included in the \code{<head>} of the document and required for rendering the page. Two big images are included below the fold and are not required for the rendering.
+
+The scenario is emulated in Mininet. Client and Server are modelled as Mininet hosts running the Google Chrome browser and the nghttpd web server, respectively. They each have two interfaces, which are connected by two Mininet links with delay and rate limiting to simulate the two connection paths. 
+
+A scheduler script was designed to send the images only over the "`cheap"' Wi-Fi subflow, and allow the other, more time-critical data, to choose from the available subflows the one with the lowest round-trip time.
+
+\begin{lstlisting}
+/*
+ * Scheduler sending packets on the subflow with the lowest RTT which has cwnd
+ *  ... except images, send images only on the "cheap" subflow (e.g. wifi)
+*/
+
+SCHEDULER min_rtt_ctype_aware;
+
+VAR SKB_CONTENT_NOSTREAM =  1;
+VAR SKB_CONTENT_DOCUMENT =  2;
+VAR SKB_CONTENT_SCRIPT =    3;
+VAR SKB_CONTENT_STYLE =     4;
+VAR SKB_CONTENT_IMAGE =     5;
+VAR SKB_CONTENT_OTHER =     6;
+
+/* only use subflows which have CWND left*/
+VAR usableSbfs = SUBFLOWS.FILTER(sbf => sbf.CWND > sbf.SKBS_IN_FLIGHT);
+
+IF (usableSbfs.EMPTY) {
+    RETURN;
+}
+
+/* send packets from resend buffer */
+IF (!RQ.EMPTY) {
+	/* resend redundant */
+	VAR notSentOnSbfs = usableSbfs.FILTER(sbf => !RQ.TOP.SENT_ON(sbf));
+	IF (!notSentOnSbfs.EMPTY) {
+		PRINT("resending on all, prio=%d", RQ.TOP.USER);
+		FOREACH(VAR sbf IN notSentOnSbfs) {
+			sbf.PUSH(RQ.TOP);
+		}
+		DROP(RQ.POP());
+		RETURN;
+	}
+}
+
+IF (!Q.EMPTY) {
+
+	/* simplified content type is passed along by the web server */
+	VAR content_type = Q.TOP.USER;
+
+	IF (Q.TOP.USER != R3) {
+		PRINT(". . sent %d segments", R4);
+		PRINT("new prio=%d", Q.TOP.USER);
+
+		SET(R3, Q.TOP.USER);
+		SET(R4, 0);
+
+		PRINT("Number of Backup Sbf %u", SUBFLOWS.FILTER(s => s.IS_BACKUP).COUNT);
+		FOREACH(VAR sbf IN SUBFLOWS) {
+			PRINT("subflow %d", sbf.ID);
+			PRINT(".   is_backup=%d", sbf.IS_BACKUP);
+			PRINT(".   rtt=%d", sbf.RTT);
+		}
+	} 
+	SET(R4, R4 + 1);
+
+	IF (Q.TOP.USER >= SKB_CONTENT_IMAGE) {
+		/* images should be only sent on the "cheap" subflow */
+		
+		/* the expensive subflow is marked as "BACKUP" and filtered out */
+		usableSbfs.FILTER(sbf => !sbf.IS_BACKUP).MIN(sbf => sbf.RTT).PUSH(Q.POP());
+	} ELSE {
+		usableSbfs.MIN(sbf => sbf.RTT).PUSH(Q.POP());
+	}
+}
+\end{lstlisting}
 
 
 \begin{figure}
