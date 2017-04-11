@@ -66,7 +66,34 @@
 	\fi\ \number\year%
 }
 
+\definecolor{mygreen}{rgb}{0,0.6,0}
+\definecolor{mygray}{rgb}{0.5,0.5,0.5}
+\definecolor{mymauve}{rgb}{0.58,0,0.82}
 
+\lstset{ %
+  basicstyle=\footnotesize,        % the size of the fonts that are used for the code
+  breakatwhitespace=false,         % sets if automatic breaks should only happen at whitespace
+  breaklines=true,                 % sets automatic line breaking
+  captionpos=b,                    % sets the caption-position to bottom
+  commentstyle=\color{mygreen},    % comment style
+  extendedchars=true,              % lets you use non-ASCII characters; for 8-bits encodings only, does not work with UTF-8
+  frame=single,	                   % adds a frame around the code
+  keepspaces=true,                 % keeps spaces in text, useful for keeping indentation of code (possibly needs columns=flexible)
+  keywordstyle=\color{blue},       % keyword style
+  language=C,                 % the language of the code
+  morekeywords={SCHEDULER,VAR,IF,ELSE,FOREACH,RETURN,SET,IN},           % if you want to add more keywords to the set
+  %numbers=left,                    % where to put the line-numbers; possible values are (none, left, right)
+  %numbersep=5pt,                   % how far the line-numbers are from the code
+  %numberstyle=\tiny\color{mygray}, % the style that is used for the line-numbers
+  rulecolor=\color{black},         % if not set, the frame-color may be changed on line-breaks within not-black text (e.g. comments (green here))
+  %showspaces=false,                % show spaces everywhere adding particular underscores; it overrides 'showstringspaces'
+  %showstringspaces=false,          % underline spaces within strings only
+  %showtabs=false,                  % show tabs within strings adding particular underscores
+  %stepnumber=2,                    % the step between two line-numbers. If it's 1, each line will be numbered
+  stringstyle=\color{mymauve},     % string literal style
+  tabsize=2,	                   % sets default tabsize to 2 spaces
+  title=\lstname                   % show the filename of files included with \lstinputlisting; also try caption instead of title
+}
 
 %=================================================================================
 % start of document
@@ -95,7 +122,7 @@
 \begin{abstract}
 %=====================================================================
 
-Multipath TCP is an extension to the Transmission Control Protocol to support the use of multiple paths between hosts with multiple interfaces.  There are several algorithms to schedule data segments over multiple paths, each making a different trade-off between throughput, resource utilization, reliability, delay and jitter. Even though Multipath TCP has is fully backwards compatibility towards the applications layer, %\cite{RFC6182}
+Multipath TCP is an extension to the Transmission Control Protocol (TCP) to support the use of multiple paths between hosts with multiple interfaces. An implementation of Multipath TCP has to decide for each data segment over which path it should be sent. This decision can be based on different criteria and algorithms, making a trade-off between throughput, resource utilization, reliability, delay and jitter. Even though Multipath TCP has fully backwards compatibility towards the applications layer, %\cite{RFC6182}
 we can reap performance benefits by enabling the application to select a scheduling algorithm based on its internal information about content types, priorities, dependencies and user expectations.
 Therefore, we modify a HTTP/2 web server to pass scheduling hints to the Multipath TCP scheduler via socket options. The scheduling algorithms are developed in a scripting language for easier evaluation.
 An evaluation is performed in simulated and real-world environments over LTE and WiFi.
@@ -144,8 +171,8 @@ Most smart phones and notebooks have multiple network interfaces nowadays. This 
 % web sites getting more complex
 % 
 % very short intro to mptcp, evtl. richtung vorteile für clients/webbrowsing
-% "`more and more devices are mobile"'
-% "`almost every modern device has multiple network interfaces"' (smartphones cell+wifi, notebooks eth+wifi(+cell), desktops eth+wifi, household routers with multi uplink dsl+lte, etc)
+% ``more and more devices are mobile''
+% ``almost every modern device has multiple network interfaces'' (smartphones cell+wifi, notebooks eth+wifi(+cell), desktops eth+wifi, household routers with multi uplink dsl+lte, etc)
 
 
 
@@ -153,7 +180,7 @@ Inherent in Multipath TCP operation is some overhead of discovering and establis
 
 
 % very short intro to http/2, maybe difference to http/1(.1)
-% "`websites become more intricate"'
+% ``websites become more intricate''
 The web has come a long way since the introduction of HTTP/0.9 in 1993. Many small improvements have been made in the meantime, all carefully providing backward compatibility. But web applications have become so intricate, and users so accustomed to responsive interactive services, that a clear break had to be made. Therefore, HTTP/2 \cite{RFC7540_HTTP2} has been specified. To allow easier adaption, the semantics were kept intact, while the underlying protocol was changed completely: A only seemingly simple text-based protocol was replaced with a more efficient, precisely specified binary protocol. 
 The new feature most relevant to us are multiplexed streams which allow all data to be transferred over few, long-lived, thus more efficient TCP connections. The multiplexing also prevents head-of-line blocking and allows prioritizing the most time-critical resources.
 
@@ -174,7 +201,7 @@ We assume that choosing the best possible Multipath TCP subflow scheduling strat
 For one, a heuristic approach can be chosen, which acts on metadata readily available in the transport layer, including transmission rate and pauses, elapsed time, and byte and packet counters. The good thing is that this approach is independent of the specific implementation of the application protocol, and can even work unchanged for several similar protocols. 
 % for some protocols, the scheduler could look into the octet stream and decide depending on contents
 % problems:
-% -> breaks separation of layers - high "`dirty hack"' factor
+% -> breaks separation of layers - high ``dirty hack'' factor
 % -> protocol decoding needs to be implemented in scheduler (os kernel!) -> proto updates need kernel updates, security problems (protocol parser is huge attack surface)
 % -> impossible with encrypted protocols (not technically impossible, but would be very complicated and has performance hit)
 Even more information about the state of higher level protocols can be gained by inspecting the octet stream itself. This brings with it all problems of Deep Packet Inspection, including security risks and increased code complexity \cite{Porter2005}. It is also not applicable to HTTP/2 as all browsers implement it with forced TLS encryption, therefore this approach is not considered any further.
@@ -340,7 +367,7 @@ In contrast, the Apple implementation takes a very different approach by providi
 
 To allow similar fine-grained control, while keeping the compatibility with unadapted applications, several APIs have been proposed. 
 %RFC 6897
-\textcite{Scharf2013} present in RFC 6897 a "`Basic API for MPTCP-Aware Applications"', enabling applications to restrict the interfaces to use for establishing paths and to query the subflows and their addresses. 
+\textcite{Scharf2013} present in RFC 6897 a ``Basic API for MPTCP-Aware Applications'', enabling applications to restrict the interfaces to use for establishing paths and to query the subflows and their addresses. 
 They also recommend that socket options on a Multipath TCP meta-socket should be, if possible, passed through to all subflow sockets.
 %Hesmans 2016 - An enhanced socket API for Multipath TCP
 
@@ -378,19 +405,35 @@ The rule-based scheduler by \textcite{RBS} is a Multipath TCP scheduler, which r
 
 % why we need to consider ssl
 % - x% of connections use ssl today
-"`In September 2014, 44.3% of web connections already use HTTPS."'
-"`The growth of HTTPS adoption is striking, with the HTTPS ?ow share more than doubling in two years."'
-"`the “S” is here to stay"'
+``In September 2014, 44.3% of web connections already use HTTPS.''
+``The growth of HTTPS adoption is striking, with the HTTPS ?ow share more than doubling in two years.''
+``the “S” is here to stay''
 
 OpenSSL will build a record from each call to SSL\_write
 https://www.imperialviolet.org/2010/06/25/overclocking-ssl.html
 
 
 
-"`the TLS standard provides a fast negotiation mechanism, which reduces the TCP+TLS handshake to 2 RTTs "' (session id)
+``the TLS standard provides a fast negotiation mechanism, which reduces the TCP+TLS handshake to 2 RTTs '' (session id)
 
 
 \section{Application Layer: HTTP/2 and HTML}
+
+The HyperText Transfer Protocol (HTTP) is the protocol which is used by web browsers to load web sites from web servers. But since its inception in 1993, web sites have changed a lot, which caused the need for improvements in HTTP. For example, modern web sites often consist of hundreds of individual files. With classic HTTP/1.0, a new TCP connection is established for every file, which needs three round trips. If encryption is used, an individual TLS handshake is performed as well, which needs another four round trips. To improve the situation, connection keep alive was introduced with HTTP/1.1, an extension which allows to use the same connection for multiple downloads. 
+Another problem is the verbosity of HTTP/1's text-based protocol. The meta data (HTTP header) is transmitted as human-readable text, which makes debugging easier, but uses more bandwidth and is more complex to parse. There have been approaches at compressing the headers, but this caused security problems and was therefore not 
+The web has come a long way since the introduction of HTTP/0.9 in 1993. Many small improvements have been made in the meantime, all carefully providing backward compatibility. But web applications have become so intricate, and users so accustomed to responsive interactive services, that a clear break had to be made. Therefore, HTTP/2 \cite{RFC7540_HTTP2} has been specified. To allow easier adaption, the semantics were kept intact, while the underlying protocol was changed completely: A only seemingly simple text-based protocol was replaced with a more efficient, precisely specified binary protocol. 
+The new feature most relevant to us are multiplexed streams which allow all data to be transferred over few, long-lived, thus more efficient TCP connections. The multiplexing also prevents head-of-line blocking and allows prioritizing the most time-critical resources.
+
+
+As opposed to older versions, HTTP/2 is based on long-lived TCP connections. Therefore it can utilize the additional sub-flow capacity more often. During a single connection, different types of requests are processed, including loading a document and resources required to display it, loading auxiliary content like images below the fold, and user-initiated AJAX requests. Every type of request has different performance needs, which makes it especially interesting for cooperation-based optimization approaches.
+
+
+%``HTTP/2 is a binary, rather than text, protocol, making it more compact and efficient
+%It uses a single, multiplexed connection per domain, rather than multiple connections carrying one file each
+%Headers are compressed with the purpose-built HPACK protocol (rather than gzip, as in SPDY)
+%HTTP/2 has a complex prioritization scheme to help browsers request the most-needed files first, which is fully supported in NGINX (SPDY had a simpler scheme)''
+%https://www.nginx.com/blog/7-tips-for-faster-http2-performance/
+
 
 \subsection{Optimizing HTTP}
 (web performance? http2 performance?)
@@ -452,7 +495,7 @@ Inherent in Multipath TCP operation is some overhead of discovering and establis
 %	3. First Paint / First Contentful Paint / First Meaningful Paint
 %	> First Meaningful Paint is essentially the paint after which the biggest above-the-fold layout change has happened, and web fonts have loaded. See the spec to learn more: First Meaningful Paint: A Layout-Based Aproach.
 %	https://developers.google.com/web/tools/lighthouse/audits/first-meaningful-paint
-%	"`Time to First Meaningful Paint: A layout-based approach"'
+%	``Time to First Meaningful Paint: A layout-based approach''
 %	https://docs.google.com/document/d/1BR94tJdZLsin5poeet0XoTW60M0SjvOJQttKT-JK8HI/view#heading=h.tdqghbi9ia5d
 
 %1 und 2 sind über chrome remote debugging api leicht erhältlich (Page.loadEventFired)
@@ -706,9 +749,9 @@ Thereafter, the gathered data is presented and analyzed.
 %  -- load time of HTML Document
 %  -- time to DOM Ready (doc + blocking scripts)
 %  -- time to first render/paint
-%  -- time to "`above the fold ready"' (this is probably the closest to user impression of load time)
+%  -- time to ``above the fold ready'' (this is probably the closest to user impression of load time)
 %     - can be measured as the time of the last change above the fold
-%  -- time to "`text ready"' (useful e.g. on newspaper sites where most users want to read the content only/first, but lot of slow crap is shown above the fold)
+%  -- time to ``text ready'' (useful e.g. on newspaper sites where most users want to read the content only/first, but lot of slow crap is shown above the fold)
 
 % 2. how the measurement is conducted (used browser, used additional scripts/extension to gather data from browser, additional scripts to gather transmitted data from network stack client/server side, automation, ...)
 % -> this could as well go into Implementation???
@@ -730,7 +773,7 @@ We have to decide which web sites to measure.
 - Synthetic content / Self built test pages (plain html, small html file with many scripts/css, big html, etc ...)
 
 
-Measuring the page load times of real-world web pages (mirrored on special web server under our control. Mirroring is necessary for multiple reasons: First, to ensure repeatability of the results we don't want the load of the "`real"' web server and the network connection in between to compromise our measurement. Second, we need the web server to support HTTP/2, which is not too common, and MPTCP, which is extremely rare in the wild)
+Measuring the page load times of real-world web pages (mirrored on special web server under our control. Mirroring is necessary for multiple reasons: First, to ensure repeatability of the results we don't want the load of the ``real'' web server and the network connection in between to compromise our measurement. Second, we need the web server to support HTTP/2, which is not too common, and MPTCP, which is extremely rare in the wild)
 
 - Alexa Top Sites (or similar ranking)
 
@@ -738,8 +781,13 @@ Measuring the page load times of real-world web pages (mirrored on special web s
 
 - Sites which are often used on mobile
 
+
+
 \section{Preparation of real-world web sites}
 
+Some real-world web sites can be used as is for evaluation by using the ``Save as'' option of a web browser. This is especially true for web sites with no content loaded with JavaScript and no third-party content.
+Most web sites need to be prepared in one or another way. Changes are inevitable when sites won't work otherwise. This is the case if the site is usually loaded over unencrypted HTTP, as for HTTP/2, browser enforce the use of TLS encryption. For third-party content, various possible solutions are discussed below.
+There are sites which we can test unmodified, but where we should change things to get more realistic results. For example, many sites use special optimizations which are tailored to HTTP/1.1, which make things worse on HTTP/2. This is the case for sharding\footnote{\url{https://www.nginx.com/blog/7-tips-for-faster-http2-performance/\#tip7sharding}}
 % web sites need to be prepared
 % some can be used as is
 % on some, changes are inevitable, they won't work otherwise (https neccessary for h2, problems with third-party requests and dynamic content, etc)
@@ -776,41 +824,36 @@ Pro: realistic (?), reproducible, (not that difficult either)
 Con: ...
 
 
-\section{How We Evaluate Web Performance }
+\section{Metrics For Evaluation Of Web Performance }
 
 \begin{wrapfigure}{r}{0.45\textwidth}
-	\includegraphics[width=0.4\textwidth]{chrome-tracing-api.png}
+	\includegraphics[width=0.45\textwidth, trim=0.25in 0.25in 0.25in 0.25in, clip]{chrome-tracing.pdf}
 	\caption{A sample interaction with the Chrome Tracing API}
+	\label{fig:chrome-tracing-api}
 \end{wrapfigure}
 
 
-When evaluating the performance of web page loads, there are several parameters to 
+When evaluating the performance of web page loads, there are several metrics to look at. We use three timing metrics, which are available over the Chrome debugging protocol\footnote{\url{https://developer.chrome.com/devtools/docs/debugger-protocol}}, the protocol of the Google Chrome web browser's developer tools.
+
 %Parameters/Properties/Values: (in order of usual occurence)
 
 
 % DOMContentLoaded
-DOM Content Loaded
+The \textit{DOMContentLoaded} event is fired after the main HTML document has been fully received and parsed by the browser. As the parsing is blocked by synchronous JavaScript, this event can't be fired before scripts have been downloaded and executed. Style sheets do not block parsing, but are recommended to be referenced before JavaScript files, so they will usually be loaded as well.
 
-
+The browser can start rendering the page before the DOM is fully loaded, but only does this if loading the DOM takes exceptionally long (multiple seconds). 
 %browsers can render before domcontentloaded, but are very relucant to do so. only if loading the document itself takes several seconds, they start rendering. they display a white screen or the web page that was open before 
 
 
 % First Meaningful Paint
-"`First Meaningful Paint is the time when page's primary content appeared on the screen. "'
+The \textit{First Contentful Paint} is the time when the first text, image or similar object is painted on screen. On most pages, the first object is a header or navigation bar \cite{Sakamoto2016TTFMP}, making this metric less useful for the purpose of measuring the time until useful content for the user is visible. We use the \textit{First Meaningful Paint} metric instead, which \textcite{Sakamoto2016TTFMP} defines as ``the time when page's primary content appeared on the screen.'' They emphasize that ``[d]efinitions of primary content differ depending on pages. For blog articles, it would be the headline + above-the-fold text (and text must be visible -- not waiting for fonts). For search engines, it would be search results. If an image is critical to the page (e.g. e-commerce product page), then first meaningful paint requires it to be visible.'' Therefore, to measure the first meaningful paint accurately, it would be necessary for the user to define the primary content. In the developer tools of Google Chrome, it is implemented using a heuristics based on the number of layout objects, page height and web font loading.
 
-"`Definitions of primary content differ depending on pages. For blog articles, it would be the 
-headline + above-the-fold text (and text must be visible -- not waiting for fonts). For search 
-engines, it would be search results. If an image is critical to the page (e.g. e-commerce product 
-page), then first meaningful paint requires it to be visible."' 
 
-"`First Contentful Paint: firsttime some contentful thing is painted. Easier available, can approximate First Meaningful Paint, but: often catches headers/navigation"'
-\cite{Sakamoto2016TTFMP}
 
 % Page Load Time (i.e. time until the onLoad event)
-Page Load Time (i.e. time until the onLoad event)
+The third metric we measure is the \textit{Page Load Time}, i.e. the time of the \textit{load} event. This is the time it takes to load all embedded resources, like style sheets, web fonts and images. 
 
-
-
+A Python script is used to instrument the browser to load pages, and to record the times at which the events noted above occur over the Chrome debugging protocol. A sample interaction with the browser over the API is shown in Figure \ref{fig:chrome-tracing-api}.
 
 
 \section{Measurement Environments}
@@ -820,106 +863,131 @@ We based our measurements on two different methods. We simulated network situati
 
 \subsection{Mininet}
 
+\todo{short intro to mininet}
+
+\todo{our setup with mininet}
+
+\todo{...}
 
 
-\subsubsection{TCP Small Queue}
 
-One of the differences of simulated and real networks we noticed is that in Mininet the TCP Small Queue throttling never got engaged. 
-If there is a stall below the TCP layer, the TCP small queues \cite{LwnTSQ} algorithm ensures not too much data gets buffered in the fifos of network interfaces, e.g. when an applications send data faster than the network interface card can relay it. To do this, the algorithm checks \code{sk_wmem_alloc}, a field of the socket struct in the kernel, which stores the amount of memory currently used for the send buffer.  When using Mininet, we noticed, that \code{sk_wmem_alloc} never increases at all. This is consequential, as the virtual ethernet devices don't have to really transmit any data, instead only passing along a pointer, and therefore never need to buffer it.
+\subsubsection{TCP Small Queues}
 
-In our simulations, a latency is added in the network emulation (netem) layer. This layer resides between the TCP stack and the virtual ethernet device, therefore it should cause  \code{sk_wmem_alloc} to increase.
+If there is a stall below the TCP layer, the TCP small queues \cite{LwnTSQ} algorithm ensures not too much data gets buffered in the fifos of network interfaces, e.g. when an applications send data faster than the network interface card can relay it. To do this, the algorithm checks \code{sk_wmem_alloc}, a field of the socket struct in the kernel, which stores the amount of memory currently used for the send buffer. The default multipath scheduler in the Linux kernel declares a subflow as temporarily unavailable if the underlying TCP socket is throttled, as seen in Listing \ref{lst:mptcp_is_temp_unavailable}. When using RBS, the information if a subflow is throttled is available as the property \code{<subflow>.THROTTLED} and can be considered in the scheduling decision.
+
+\begin{lstlisting}[label=lst:mptcp_is_temp_unavailable,caption={Excerpt from Multipath TCP Kernel, \code{net/mptcp/mptcp_sched.c}
+%\footnote{url{https://github.com/multipath-tcp/mptcp/blob/e076f6be0f4b3d48d59c686d0a9ff4b87bc91a0f/net/mptcp/mptcp\_sched.c\#L39}}
+}]
+static bool mptcp_is_temp_unavailable(struct sock *sk,
+				      const struct sk_buff *skb,
+				      bool zero_wnd_test)
+{
+ [...]
+	/* If TSQ is already throttling us, do not send on this subflow. When
+	 * TSQ gets cleared the subflow becomes eligible again.
+	 */
+	if (test_bit(TSQ_THROTTLED, &tp->tsq_flags))
+		return true;
+\end{lstlisting}
+
+This is where a difference between simulated and real networks exists: in Mininet the TCP Small Queue throttling never got engaged, because \code{sk_wmem_alloc} never changes from its initial value of \code{1}. This is consequential, as the virtual ethernet devices don't have to really transmit any data, instead only passing along a pointer, and therefore never need to buffer it.
+
+In our simulations, each packet is delayed in the network emulation (netem) layer, and traffic shaping is used, to simulate a real link with latency and limited bandwidth. This layer resides between the TCP stack and the virtual ethernet device, therefore it should cause \code{sk_wmem_alloc} to increase, but it didn't.
+%-        Gilt das auch für shaping ohne delay, e.g., 10 Mbit bw? Würde es ohne den patch also mit 10Mbit und ohne delay „wie erwartet“ laufen?
+When using only traffic shaping, but not the delaying functionality of netem, the problem does not occur. 
 
 %https://kernelnewbies.org/Linux_3.6#head-b1e33c4c78affb4186e5affc4b4a2bc7d44a3e66
 %https://lwn.net/Articles/507065/
 
-So we built a test case where a delay is added on one host with netem\footnote{\code{tc qdisc add dev h1-eth0 root netem delay 5000ms}}, and then iperf is run to create traffic between the host. We also added a debug output to the function \code{tcp_small_queue_check} in \code{net/ipv4/tcp_output.c} \footnote{\url{http://lxr.free-electrons.com/source/net/ipv4/tcp_output.c\#L2074}} to see if TSQ will throttle the output. But in Mininet / veth, \code{sk_wmem_alloc} is always at the value \code{1}. The \code{TSQ_THROTTLED} never gets set. If doing the same on two machines connected over ethernet cable, \code{sk_wmem_alloc} raises, and eventually \code{TSQ_THROTTLED} is set.
+So we built a test case where a delay is added on one host with netem\footnote{\code{tc qdisc add dev h1-eth0 root netem delay 5000ms}}, and then \code{iperf} is run to create traffic between the host. We also added a debug output to the function \code{tcp_small_queue_check} in \code{net/ipv4/tcp_output.c} \footnote{\url{http://lxr.free-electrons.com/source/net/ipv4/tcp_output.c\#L2074}} to see if TSQ will throttle the output. But in Mininet / veth, \code{sk_wmem_alloc} is always at the value \code{1}. The \code{TSQ_THROTTLED} never gets set. If doing the same on two machines connected over ethernet cable, \code{sk_wmem_alloc} raises, and eventually \code{TSQ_THROTTLED} is set.
 
-An inquiry on the Mininet mailing list resulted in the hint that the latency emulation code calls \code{skb_orphan_partial}, which reduces the socket buffer's size to \code{1}, therefore essentially removing it from \code{sk_wmem_alloc}.
-This further lead us to a code comment in the Linux kernel which says that this behaviour is by design, because "`orphaning usually takes place at TX completion time, so \_before\_ the link transit delay"' (Linux kernel 4.4, \code{net/sched/sch_netem.c}, line 429). By commenting out call to \code{skb_orphan_partial}, we were able to simulate the TSQ throttling in Mininet.
+An inquiry on the Mininet mailing list resulted\footnote{\url{https://mailman.stanford.edu/pipermail/mininet-discuss/2017-April/007425.html}} in the hint that the latency emulation code calls \code{skb_orphan_partial}, which reduces the socket buffer's size to \code{1}, therefore essentially removing it from \code{sk_wmem_alloc}.
+This further lead us to a code comment in the Linux kernel which says that this behaviour is by design, because ``orphaning usually takes place at TX completion time, so \_before\_ the link transit delay'' (Linux kernel 4.4, \code{net/sched/sch_netem.c}, line 429). 
+%-        Netem delay packets werden EXTRA rausgenommen, weil?
+The reason is that the netem layer is designed to emulate delays in the \textit{network}, not \textit{network interface}, to test e.g. TCP congestion control algorithms. Therefore it needs to behave as if the delay occured after orphaning the socket buffer.  But we want do emulate delays in the \textit{network interface} in this case, so we change this behaviour by commenting out the call to \code{skb_orphan_partial} as shown in Listing \ref{lst:sch_netem}. To see if the call would have been normally made, we also added a debug output temporarily. This enabled us to test the TSQ throttling in our simulation with Mininet.
 
-%I suspect it the "veth" virtual ethernet pipe device might be the underlying reason, but I've not confirmed this yet.
+
+\begin{lstlisting}[label=lst:sch_netem,caption={Modified version of Linux kernel 4.4, \code{net/sched/sch_netem.c}}]
+398 /*
+399  * Insert one skb into qdisc.
+400  * Note: parent depends on return value to account for queue length.
+401  *      NET_XMIT_DROP: queue length didn't change.
+402  *      NET_XMIT_SUCCESS: one skb was queued.
+403  */
+404 static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch)
+405 {
+ [...]
+429         /* If a delay is expected, orphan the skb. (orphaning usually takes
+430          * place at TX completion time, so _before_ the link transit delay)
+431          */
+432         // if (q->latency || q->jitter)
+433         //         skb_orphan_partial(skb);
+434
+435         printk("netem_enqueue: ...not calling skb_orphan_partial latency=%ld, jitter=%ld, sk=%p, sk_wmem_alloc=%d", 
+436                q->latency, q->jitter, skb->sk, skb->sk == NULL ? 0 : atomic_read(&skb->sk->sk_wmem_alloc));
+\end{lstlisting}
 
 
-\section{Real World Measurements}
 
+
+
+
+
+
+\subsection{Real World Measurements}
+
+To confirm the measurements we conducted in Mininet, we ran the same software on real hardware and real networks. For the server side, we used a virtual machine located in the Frankfurt data center of Amazon Web Services and another one in the Roubaix data center of OVH. As clients, we used notebooks connected to the internet via Wi-Fi and DSL, via a Wi-Fi hotspot with VPN tunneling, and via USB to a mobile phone with an LTE connection.\footnote{We were unable to use the university's internet connection directly as its Firewall blocks Multipath TCP connections.}
+
+\todo{more details about the measurement setup?}
 
 
 
 \section{Evaluations}
 
-
+\todo{something}
 
 \subsection{Evaluation A}
 % zeigen - implementiertung funktioniert grundsätzlich
-% simple ("`academic"') content-type specific scheduling
+% simple (``academic'') content-type specific scheduling
 
-The goal of this evaluation is to test the implementation of content-type specific scheduling, and to show a simple but already useful optimization. The network situation is in Figure \ref{eva1-scenario}. A user with a smart phone is connected to a free Wi-Fi hotspot, which routes the traffic through a VPN and therefore incurs a high latency, and is also connected to a cellular network with low latency but metered traffic limits. The user loads a web page which is modelled after a typical news article, it consists of an HTML document referencing style sheet, script and images of different size. All styles and scripts are included in the \code{<head>} of the document and required for rendering the page. Two big images are included below the fold and are not required for the rendering.
+The goal of this evaluation is to test the implementation of content-type specific scheduling, and to show a first content-type based optimization of a synthetic web page. The network situation is shown in Figure \ref{eva1-scenario}. A user with a smart phone is connected to a free Wi-Fi hotspot, which routes the traffic through a VPN and therefore incurs a high latency, and is also connected to a cellular network with low latency but metered traffic limits. The user loads a web page which is modelled after a typical news article, it consists of an HTML document referencing style sheet, script and images of different size. All styles and scripts are included in the \code{<head>} of the document and required for rendering the page. Two big images are included below the fold and are not required for the rendering.
 
 The scenario is emulated in Mininet. Client and Server are modelled as Mininet hosts running the Google Chrome browser and the nghttpd web server, respectively. They each have two interfaces, which are connected by two Mininet links with delay and rate limiting to simulate the two connection paths. 
 
-A scheduler script was designed to send the images only over the "`cheap"' Wi-Fi subflow, and allow the other, more time-critical data, to choose from the available subflows the one with the lowest round-trip time.
+A scheduler script was designed to send the images only over the ``cheap'' Wi-Fi subflow, and allow the other, more time-critical data, to choose from the available subflows the one with the lowest round-trip time.
 
 \begin{lstlisting}
 /*
- * Scheduler sending packets on the subflow with the lowest RTT which has cwnd
- *  ... except images, send images only on the "cheap" subflow (e.g. wifi)
+ * This scheduler sends packets on the subflow with the lowest RTT which has congestion window available
+ *  ... except images, they are sent only on the "cheap" (non-backup) subflow (e.g. Wi-Fi instead of 3G)
 */
-
 SCHEDULER min_rtt_ctype_aware;
 
-VAR SKB_CONTENT_NOSTREAM =  1;
-VAR SKB_CONTENT_DOCUMENT =  2;
-VAR SKB_CONTENT_SCRIPT =    3;
-VAR SKB_CONTENT_STYLE =     4;
-VAR SKB_CONTENT_IMAGE =     5;
-VAR SKB_CONTENT_OTHER =     6;
+VAR SKB_CONTENT_NOSTREAM = 1;
+VAR SKB_CONTENT_DOCUMENT = 2;
+VAR SKB_CONTENT_SCRIPT   = 3;
+VAR SKB_CONTENT_STYLE    = 4;
+VAR SKB_CONTENT_IMAGE    = 5;
+VAR SKB_CONTENT_OTHER    = 6;
 
 /* only use subflows which have CWND left*/
 VAR usableSbfs = SUBFLOWS.FILTER(sbf => sbf.CWND > sbf.SKBS_IN_FLIGHT);
 
-IF (usableSbfs.EMPTY) {
-    RETURN;
-}
+/* no subflows available? do nothing. */
+IF (usableSbfs.EMPTY) { RETURN; }
 
-/* send packets from resend buffer */
+/* send packets from resend buffer redundantly on the fastest new subflows */
 IF (!RQ.EMPTY) {
-	/* resend redundant */
-	VAR notSentOnSbfs = usableSbfs.FILTER(sbf => !RQ.TOP.SENT_ON(sbf));
-	IF (!notSentOnSbfs.EMPTY) {
-		PRINT("resending on all, prio=%d", RQ.TOP.USER);
-		FOREACH(VAR sbf IN notSentOnSbfs) {
-			sbf.PUSH(RQ.TOP);
-		}
-		DROP(RQ.POP());
-		RETURN;
-	}
+	usableSbfs.FILTER(sbf => !RQ.TOP.SENT_ON(sbf)).MIN(sbf => sbf.RTT).PUSH(RQ.POP());
+	RETURN;
 }
 
 IF (!Q.EMPTY) {
-
 	/* simplified content type is passed along by the web server */
 	VAR content_type = Q.TOP.USER;
 
-	IF (Q.TOP.USER != R3) {
-		PRINT(". . sent %d segments", R4);
-		PRINT("new prio=%d", Q.TOP.USER);
-
-		SET(R3, Q.TOP.USER);
-		SET(R4, 0);
-
-		PRINT("Number of Backup Sbf %u", SUBFLOWS.FILTER(s => s.IS_BACKUP).COUNT);
-		FOREACH(VAR sbf IN SUBFLOWS) {
-			PRINT("subflow %d", sbf.ID);
-			PRINT(".   is_backup=%d", sbf.IS_BACKUP);
-			PRINT(".   rtt=%d", sbf.RTT);
-		}
-	} 
-	SET(R4, R4 + 1);
-
 	IF (Q.TOP.USER >= SKB_CONTENT_IMAGE) {
-		/* images should be only sent on the "cheap" subflow */
-		
-		/* the expensive subflow is marked as "BACKUP" and filtered out */
+		/* the subflows marked as "BACKUP" are filtered out */
 		usableSbfs.FILTER(sbf => !sbf.IS_BACKUP).MIN(sbf => sbf.RTT).PUSH(Q.POP());
 	} ELSE {
 		usableSbfs.MIN(sbf => sbf.RTT).PUSH(Q.POP());
