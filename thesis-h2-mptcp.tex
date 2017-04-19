@@ -348,9 +348,9 @@ In this chapter, we go through transport, presentation and application layer, th
 
 %
 %http://www.ip-insider.de/anwendungen-und-konkurrenz-fuer-multipath-tcp-a-445245/
-%\cite{IpInsiderMptcp}
+%
 
-Two pipes are better than one - that's Multipath TCP in a nutshell. In this case, a pipe is a distinct path between two devices, identified by the IP adresses of both peers. Combining multiple of these subflows can provide several advantages. Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow stops working, the backup takes over seamlessly. On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows. 
+Two pipes are better than one - that's Multipath TCP in a nutshell \cite{IpInsiderMptcp}. In this case, a pipe is a distinct path between two devices, identified by the IP adresses of both peers. Combining multiple of these subflows can provide several advantages. Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow stops working, the backup takes over seamlessly. On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows.
 
 This section covers the background knowledge on Multipath TCP which is required for the remaining work. We start by enumerating the current software implementations of Multipath TCP and giving some information on its current deployment. Following that, we describe the architecture of protocol and implementations. We present studies evaluating and optimizing Multipath TCP performance, and proposals and implementions of interfaces to the application layer. To finish this section, we explain the rule-based scheduler, a Multipath TCP packet scheduler, which makes its decisions based on script programs which are changeable during runtime, allowing us to evaluate different scheduling approaches faster.
 
@@ -368,7 +368,7 @@ This section covers the background knowledge on Multipath TCP which is required 
 		household routers with multiple uplinks & DSL and cellular (LTE) \\ \bottomrule
 		\end{tabular}
 		\caption{Typical network interfaces of common device types}
-		\label{}
+		\label{table:typical-netifs}
 \end{table}
 
 
@@ -443,28 +443,47 @@ They also recommend that socket options on a Multipath TCP meta-socket should be
 
 
 \subsection{Rule-Based Scheduler}
-The rule-based scheduler by \textcite{RBS} is a Multipath TCP scheduler, which runs a small program for every scheduling decision. These programs can be written in the RBS scripting language and are compiled to a byte code, which is executed by a virtual machine in the scheduler. The possibility of dynamically loading the scheduling algorithms at runtime, without having to recompile the Linux kernel, allows us to evaluate different scheduling approaches quickly.
-
-%text from implementation: The scheduler algorithms are implemented in a scripting language. The scripts are just-in-time compiled and interpreted by the Rule Based Scheduler, a byte-code based virtual machine running in the MPTCP implementation in the Linux kernel.
-
-\subsubsection{Scheduler}
+The rule-based scheduler by \textcite{RBS} is a programmable Multipath TCP scheduler. The scheduler programs are written in the RBS scripting language. They are just-in-time compiled to byte code and executed by a virtual machine in the scheduler for every scheduling decision. They can be loaded dynamically without having to recompile the Linux kernel and reboot the system. This allows us to change algorithms and evaluate different scheduling approaches quickly.
 
 
-The scheduler algorithms are implemented in a scripting language. The scripts are just-in-time compiled and interpreted by the Rule Based Scheduler, a byte-code based virtual machine running in the MPTCP implementation in the Linux kernel.
+\subsubsection{Scheduler Scripts}
+
+In the later chapters, we show several scheduler scripts written in the RBS language. To allow the reader to follow these scripts, we give an introduction to the core objects used in the scripts.
+The syntax of RBS is similar to JavaScript, with the most obvious difference that keywords are written in upper-case. 
+The \code{Q} and \code{RQ} variables provide access to packet list objects, containing the sending queue and the retransmission queue, respectively. As long as any of these queues contains packets, the script is run in an implicit loop. Therefore, no loop over available packets is necessary in the script. The \code{SUBFLOWS} variable contains the list of all subflows. All lists can be filtered by invoking the \code{FILTER} method, as shown in \
+
+
 
 % subflow attributes
 \begin{table}
 	\begin{tabularx}{\linewidth}{ l X } \toprule
 	Attribute & Description \\ \midrule
-	\texttt{ID}								& Numeric identifier of the subflow. Unique per MPTCP connection. \\
-	\texttt{RTT} 							& Calculated round trip time on this subflow in milliseconds. \\
-	\texttt{LOST\_SKBS} 				& Number of packets which were lost on this subflow. \\
-	\texttt{SKBS\_IN\_FLIGHT} & Number of packets which were sent out on this subflow but not yet acknowledged or retransmitted. \\
-	\texttt{CWND} 						& Congestion window. Number of packets which are allowed to be in flight on this subflow at the same time. \\
-	\texttt{IS\_BACKUP} 			& Boolean flag, set to \texttt{1} if subflow is marked as a backup subflow by the user or operating system. \\
+	\code{ID}								& Numeric identifier of the subflow. Unique per MPTCP connection. \\
+	\code{RTT} 							& Calculated round trip time on this subflow in milliseconds. \\
+	\code{LOST_SKBS} 				& Number of packets which were lost on this subflow. \\
+	\code{SKBS_IN_FLIGHT} & Number of packets which were sent out on this subflow but not yet acknowledged or retransmitted. \\
+	\code{CWND} 						& Congestion window. Number of packets which are allowed to be in flight on this subflow at the same time. \\
+	\code{IS_BACKUP} 			& Boolean flag, \code{TRUE} if subflow is marked as a backup subflow by the user or operating system. \\
 	\bottomrule
 	\end{tabularx}
-	\caption{Information about a subflow available to the MPTCP scheduler}
+	\caption{Subflow details as seen from the RBS script}
+	\label{}
+\end{table}
+
+
+
+% buffer attributes
+\begin{table}
+	\begin{tabularx}{\linewidth}{ l X } \toprule
+	Attribute & Description \\ \midrule
+	\code{USER}								& Application-defined parameter (set via \code{setsockopt}). \\
+	
+	\texttt{SENT\_ON(\textit{<subflow>})} 							& Boolean flag, \code{TRUE} if the packet has been sent on the given subflow. \\
+	\code{SENT_ON_ALL} 				& Boolean flag, \code{TRUE} if the packet has been sent all subflows. \\
+	
+	\bottomrule
+	\end{tabularx}
+	\caption{Packet properties}
 	\label{}
 \end{table}
 
@@ -651,11 +670,11 @@ The client's interfaces are either Wi-Fi and 3G/LTE, as found on smart phones, o
 
 
 
-\section{Analysis of web page behaviour}
+\section{Analysis of web page behaviour} \label{approach-web-analysis}
 
 
 
-\section{Interaction between transport and application layer}
+\section{Interaction between transport and application layer} \label{approach-interaction}
 
 %Wie dem Scheduler mitteilen was er tun soll?
 %Problem: Wie erfolgt Kommunikation mit dem mptcp-scheduler? Zwischen mptcp und http2 sitzt in der regel noch tls! -> Paketinhalt für mptcp-scheduler nicht lesbar - evtl. über byte-counter
@@ -673,39 +692,38 @@ The other approach is to have several general scheduler algorithms, each with di
 
 \section{Optimizing the Multipath TCP scheduler}
 
-Several optimization approaches are considered in this chapter.
+We consider several optimization approaches based on our analysis of web page structure and the approach to pass hints about content and priority to the scheduler.
+
 
 \subsection{Switching the scheduler based on content type or priority}
 Many modern web pages consist of dozens of resources. They can be classified by their technical priority for rendering the page. 
 
-1. The \textit{Document} is the main HTML file which is loaded first. It is strictly necessary for the browser to render the page, and to load subsequent resources. 
+The \textit{Document} is the main HTML file which is loaded first. It is strictly necessary for the browser to render the page. It is also usually required for loading subsequent resources, because it contains their addresses. This requirement can be avoided by using the HTTP/2 push feature, but this has other drawbacks. 
 
-2. Synchronous Javascript resources (\code{<script>} tags) are required by the browser to construct the Document Object Model (DOM) tree. They must be loaded as soon as the tag is parsed by the browser.
+Synchronous JavaScript resources (\code{<script>} tags) are required by the browser to construct the Document Object Model (DOM) tree. They must be loaded as soon as the tag is parsed by the browser.
 
-3. Style sheets are needed for the first layout cycle of the page, which means usually nothing is displayed to the user until they are fully loaded.
+Style sheets are needed for the first layout cycle of the page, which means usually that nothing is displayed to the user until they are fully loaded. If they are loaded too slowly, an the bare page without style sheets applied will be displayed, leaving a bad user experience.
 
-4. Images can be loaded after the base frame of the site is visible, especially if the image size is provided in the Document source. The same is true for video, audio and most AJAX requests.
+Images can be loaded after the base frame of the site is visible, especially if the image size is provided in the Document source. The same is true for video, audio and most AJAX requests. 
 
-...
+We can also look at the subjective utility as perceived by the user.
 
-One can also look at their subjective utility to the user.
+In the case of text heavy pages, like on news sites, the Document and some images are most useful to the user as that contains the content of the page. In these cases, the JavaScript resources are often providing tracking and advertising. They are very important for the web site operator but not useful (even annoying) for the user. Especially tracking scripts can be delivered with lower priority as they are invisible and not time critical.
 
-In the case of text heavy pages, like news sites, the Document and some images are most useful to the user as that contains the content of the page. In these cases, the Javascript resources are often providing tracking and advertising, so very important for the webmaster but annoying for the user. Especially tracking scripts can be delivered with lower priority as they are invisible and not time critical.
-
-For interactive pages, the Javascript might provide all the relevant contents.   
-
-...  ... 
+For single page web applications and other interactive pages all the relevant content is loaded by JavaScript. Therefore, JavaScript resources have a high user utility here.
 
 Modern browsers and speed-optimized web pages make sure that the resources with the highest technical priority are requested first. The HTTP/2 server can also facilitate this by pushing out high-priority resources with HTTP Push.
 
-The resources required for the first layout cycle will be handled by a scheduler with emphasis on low latency, %
+We can therefore try to single out resources with low technical priority and low subjective utility. By giving this as a hint to the scheduler, these might be transmitted only on a cheaper but slower subflow. On the other hand, the higher prioritized contents could be transmitted redundantly in case of a lossy connection.
+
+The resources with high technical priority, especially if required for the first layout cycle, will be handled by a scheduler with emphasis on low latency. %
 %latency critical stuff -> redundant if lossy
-like a redundant scheduler on lossy connections. The redundant scheduler sends all segments out on all paths to minimize delays caused by packet loss.
+In case of a lossy connection, this could be a scheduler transmitting packets redundantly on all subflows, thereby minimizing delays caused by packet loss.
 %latency critical stuff -> send on backup if backup has lower rtt
-\todo{...or send on low-rtt despite IS_BACKUP}
+%\todo{...or send on low-rtt despite IS\_BACKUP}
 %-> combine by checking for loss+rtt
 
-After these high priority resources are sent out, a regular, more bandwidth conserving scheduler can be used.
+After these high priority resources are sent out, a more bandwidth conserving scheduler can be used. For example, if one subflow has a higher cost than the other, we could prevent lower priority resources from being sent over this expensive path.
 
 
 
@@ -759,10 +777,9 @@ To be at all useful, the server must support HTTP/2, and support it with at leas
 
 \section{Modifications to the Web Server}
 
-% newer openssl version (apls support)
-
+\subsection{RBS Specific Modifications}
 % selecting a RBS script for HTTP/2 connections (command line parameter)
-\begin{lstlisting}[label={lst:nghttpd_select_ruleset},caption={Selecting a RBS Script in the HTTP/2 Connection Setup Method of Nghttpd},numbers=left,firstnumber=281,linebackgroundcolor={\lstLinesAdded{284-295}}]
+\begin{lstlisting}[label={lst:nghttpd_select_ruleset},caption={Extending Nghttpd's connection setup method to select a RBS script, excerpt of \code{HttpServer.cc}},numbers=left,firstnumber=281,linebackgroundcolor={\lstLinesAdded{284-295}}]
   void accept_connection(int fd) {
     util::make_socket_nodelay(fd);
 
@@ -800,12 +817,34 @@ To be at all useful, the server must support HTTP/2, and support it with at leas
 
 
 
-% changing the maximum ssl record size
-
-
 
 % each HTTP/2 request is internally a Stream (in spec+server)
 % store information about/in the stream: simplified content type -> priority
+According to the HTTP/2 protocol specification, each transaction, or combination of request and response, is processed in a stream. Accordingly, Nghttpd has a \code{Stream} class which is instantiated for each request and stores relevant information. We extended this class by a \code{scheduling_content_type} field, which is a simplified representation of the transactions content type.
+
+
+\begin{lstlisting}[label=lst:mptcp_is_temp_unavailable,caption={Nghttpd's \code{struct Stream}, excerpt of \code{HttpServer.h}
+%\footnote{url{https://github.com/multipath-tcp/mptcp/blob/e076f6be0f4b3d48d59c686d0a9ff4b87bc91a0f/net/mptcp/mptcp\_sched.c\#L39}}
+},numbers=left,firstnumber=142,linebackgroundcolor={\lstLinesAdded{156}}]
+struct Stream {
+  BlockAllocator balloc;
+  RequestHeader header;
+  Http2Handler *handler;
+  FileEntry *file_ent;
+  ev_timer rtimer;
+  ev_timer wtimer;
+  int64_t body_length;
+  int64_t body_offset;
+  // Total amount of bytes (sum of name and value length) used in
+  // headers.
+  size_t header_buffer_size;
+  int32_t stream_id;
+  bool echo_upload;
+  uint32_t priority_file_type;   // --> for mptcp scheduler
+  Stream(Http2Handler *handler, int32_t stream_id);
+  ~Stream();
+};
+\end{lstlisting}
 
 
 \begin{lstlisting}[numbers=left]
@@ -817,7 +856,7 @@ To be at all useful, the server must support HTTP/2, and support it with at leas
 605         return frame->hd.type;
 606      case RBS_PROP_CONTENTTYPE:
 607        if (!stream) return SKB_CONTENT_NOSTREAM;
-608        return stream->priority_file_type;
+608        return stream->scheduling_content_type;
 	[...]
 614    }
 615  }
@@ -830,6 +869,13 @@ To be at all useful, the server must support HTTP/2, and support it with at leas
 % content type 
 
 
+
+
+\subsection{TLS}
+
+% newer openssl version (apls support)
+
+% changing the maximum ssl record size
 
 \begin{tikzpicture}[->,>=stealth',shorten >=1pt,auto,node distance=1.1cm,
 		semithick]
@@ -881,6 +927,14 @@ To be at all useful, the server must support HTTP/2, and support it with at leas
 
 
 
+\section{Schedulers}
+
+%we use the <packet>.USER property and/or registers R1..6 set by the application code
+%to choose the best possible scheduling preferences/modify the scheduling algorithm
+
+
+
+
 
 %=====================================================================
 \chapter{Evaluation}
@@ -920,7 +974,7 @@ Thereafter, the gathered data is presented and analyzed.
 
 
 
-\section{Selection of sample web pages}
+\section{Selection of Sample Web Pages}
 
 We have to decide which web sites to measure.
 
@@ -937,45 +991,45 @@ Measuring the page load times of real-world web pages (mirrored on special web s
 
 
 
-\section{Preparation of real-world web sites}
+\section{Preparation of Real-World Web Pages}
 
-Some real-world web sites can be used as is for evaluation by using the ``Save as'' option of a web browser. This is especially true for web sites with no content loaded with JavaScript and no third-party content.
-Most web sites need to be prepared in one or another way. Changes are inevitable when sites won't work otherwise. This is the case if the site is usually loaded over unencrypted HTTP, as for HTTP/2, browser enforce the use of TLS encryption. For third-party content, various possible solutions are discussed below.
-There are sites which we can test unmodified, but where we should change things to get more realistic results. For example, many sites use special optimizations which are tailored to HTTP/1.1, which make things worse on HTTP/2. This is the case for sharding\footnote{\url{https://www.nginx.com/blog/7-tips-for-faster-http2-performance/\#tip7sharding}}
-% web sites need to be prepared
 % some can be used as is
+Some real-world web pages can be used as is for evaluation by using the ``Save as'' option of a web browser. This is especially true for web sites with no content loaded with JavaScript and no third-party content.
+% most web sites need to be prepared
+Most web sites need to be prepared in one or another way. 
 % on some, changes are inevitable, they won't work otherwise (https neccessary for h2, problems with third-party requests and dynamic content, etc)
+Changes are inevitable when sites won't work otherwise. This is the case if the site is usually loaded over unencrypted HTTP, as for HTTP/2, browser enforce the use of TLS encryption. For third-party content, various possible solutions are discussed below.
 % on some, we should change stuff, e.g. because there are optimizations for http/1.1 which make things worse on http/2 and it would be unrealistic to use them in this state
+There are sites which we can test unmodified, but where we should change things to get more realistic results. For example, many sites use special optimizations which are tailored to HTTP/1.1, which make things worse on HTTP/2. One example of such optimizations is sharding\footnote{\url{https://www.nginx.com/blog/7-tips-for-faster-http2-performance/\#tip7sharding}}, a technique where resources on a page are spread over several domains, to overcome the limitation that web browser are only allowed to open a certain number of parallel connections to one domain. With HTTP/2, this slows down the page load because of the overhead of establishing many TCP and TLS connections, which are unnecessary as parallel downloads are now possible over a single connection.
+
 % etc.
 
 
 
 \subsection{Handling dynamic and third party requests}
 
-Downloading web pages with browser / wget and delivering with nghttpd - Problem: how to handle dynamic or third-party requests?
+As we found in Section \ref{approach-web-analysis}, most modern web sites request resources from third-party hosts, and refer to resources which are generated dynamically by the server, possibly changing with every request.
+We have to handle these cases in our evaluation. 
 
-\begin{itemize}
-	\item Cancel/reject all third party requests (in-browser / iptables)
+%Downloading web pages with browser/wget and delivering with nghttpd - Problem: how to handle dynamic or third-party requests?
 
-	Pro: Easy, reproducible
 
-	Con: not realistic (always a lot faster than real request)
+In these simulations, we chose to keep most third party requests as-is, loading the resource from the original server, especially advertisements, tracking snippets and complex libraries from Content Delivery Networks (CDNs). This has the advantage of providing more realistic results than rejecting all third-party requests at the browser or firewall level. 
+Another possible approach would have been to implement an explicit or transparent HTTP/2 proxy, which caches all requests for a page load, and replays them for later evaluations. This has been implemented for HTTP/1.1 by the Chromium team in web-page-replay\footnote{\url{https://github.com/chromium/web-page-replay}}. 
+Simple JavaScript libraries (consisting of single files) were downloaded and served locally, and we modifying the web page to fetch them from the local server. This is a simple optimization which is realistic to be made by real website operators.
 
-	Pro: might be faster by the same amount, so still comparable (?)
+% Cancel/reject all third party requests (in-browser / iptables)
+%	Pro: Easy, reproducible
+%	Con: not realistic (always a lot faster than real request)
+%	Pro: might be faster by the same amount, so still comparable (?)
 
-	\item Let all third party requests through to the original sites
+% Let all third party requests through to the original sites
+%	Pro: Easy, realistic
+%	Con: dependent on network condition of test computer and load on original server (not reproducible)
 
-	Pro: Easy, realistic
-
-	Con: dependent on network condition of test computer and load on original server (not reproducible)
-
-\end{itemize}
-
-Alternative: Use a caching HTTP/2 proxy (nghttpx, apache)
-
-Pro: realistic (?), reproducible, (not that difficult either)
-
-Con: ...
+% Alternative: Use a caching HTTP/2 proxy (nghttpx, apache)
+%	Pro: realistic (?), reproducible, (not that difficult either)
+%	Con: ...
 
 
 \section{Metrics For Evaluation Of Web Performance }
@@ -1008,6 +1062,8 @@ The \textit{First Contentful Paint} is the time when the first text, image or si
 The third metric we measure is the \textit{Page Load Time}, i.e. the time of the \textit{load} event. This is the time it takes to load all embedded resources, like style sheets, web fonts and images. 
 
 A Python script is used to instrument the browser to load pages, and to record the times at which the events noted above occur over the Chrome debugging protocol. A sample interaction with the browser over the API is shown in Figure \ref{fig:chrome-tracing-api}.
+
+Additionally, we look at the amount of bytes transmitted and received per subflow. This metric allows us to see how well the scheduling algorithm makes use of multiple subflows. On the other hand, if we have subflows with different cost, like metered mobile data, this allows us to evaluate how cost-effective our algorithm is.
 
 
 \section{Measurement Environments}
