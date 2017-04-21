@@ -1,4 +1,4 @@
-\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud11b]{tudthesis}
+\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud6d]{tudthesis}
 
 %--------------------------------------------------------
 % shows reference keys
@@ -72,6 +72,7 @@
 \definecolor{mymauve}{rgb}{0.58,0,0.82}
 
 \lstset{ %
+  escapeinside={(*}{*)},
   basicstyle=\footnotesize\ttfamily,        % the size of the fonts that are used for the code
   breakatwhitespace=false,         % sets if automatic breaks should only happen at whitespace
   breaklines=true,                 % sets automatic line breaking
@@ -81,8 +82,6 @@
   frame=single,	                   % adds a frame around the code
   keepspaces=true,                 % keeps spaces in text, useful for keeping indentation of code (possibly needs columns=flexible)
   keywordstyle=\color{blue},       % keyword style
-  language=C,                 % the language of the code
-  morekeywords={SCHEDULER,VAR,IF,ELSE,FOREACH,RETURN,SET,IN},           % if you want to add more keywords to the set
   %numbers=left,                    % where to put the line-numbers; possible values are (none, left, right)
   %numbersep=5pt,                   % how far the line-numbers are from the code
   %numberstyle=\tiny\color{mygray}, % the style that is used for the line-numbers
@@ -95,7 +94,14 @@
   tabsize=2,	                   % sets default tabsize to 2 spaces
   title=\lstname                   % show the filename of files included with \lstinputlisting; also try caption instead of title
 }
+\lstdefinestyle{RBS}{
+  language=C,                 % the language of the code
+  morekeywords={SCHEDULER,VAR,IF,ELSE,FOREACH,RETURN,SET,IN}           % if you want to add more keywords to the set
+}
 
+\lstdefinestyle{C_Code}{
+  language=C                 % the language of the code
+}
 
 
 \makeatletter
@@ -346,6 +352,11 @@ In this chapter, we go through transport, presentation and application layer, th
 
 \section{Transport Layer: Multipath TCP}
 
+
+\begin{figure}
+	\includegraphics[width=1\textwidth]{mptcp-functional-decomposition.pdf}
+	\caption{Interaction of the functional building blocks of Multipath TCP as described in \cite{RFC6182}}
+\end{figure}
 %
 %http://www.ip-insider.de/anwendungen-und-konkurrenz-fuer-multipath-tcp-a-445245/
 %
@@ -356,6 +367,33 @@ This section covers the background knowledge on Multipath TCP which is required 
 
 %tuple of (source address, source port, destination address, destination port).
 
+
+
+
+\subsection{Implementations and Deployment}
+%We start by enumerating the current software implementations of Multipath TCP and giving some information on its current deployment.
+
+%reference(?) implementation in linux kernel
+The current reference implementation\footnote{\url{http://multipath-tcp.org/}} is based on the Linux kernel and maintained by \textcite{multipathtcp} at the Université Catholique de Louvain. A similar patch for the FreeBSD kernel has been developed at Swinburne University\footnote{\url{http://caia.swin.edu.au/newtcp/mptcp/}}.
+%https://support.apple.com/en-us/HT201373
+ The first implementation of Multipath TCP was developed as a user-space proxy\footnote{\url{https://open-innovation.alcatel-lucent.com/projects/mptcp-proxy}} by Hampel at Bell Labs, and is no longer maintained.  
+%other implementations
+The most widely deployed implementation is found in Apple's XNU kernel \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the Siri personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
+All aforementioned implementations are open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
+
+\textcite{Bonaventure2016Deploy} report a deployment by some cellular network 
+operators. Hardware vendors include the Multipath TCP implementation in the 
+Linux kernel of their Android phones. The cellular provider provides a SOCKS 
+proxy server at carrier level. Together with a SOCKS proxy in the Android 
+operating system, both using Multipath TCP, this allows combining Wi-Fi and 
+cellular connectivity over existing infrastructure. 
+They also describe a deployment scenario where customers of ``hybrid access 
+networks'' are connected over DSL and wireless links, which are combined 
+using Multipath TCP to achieve higher bandwidth.
+In general, Multipath TCP can be deployed in scenarios where at least one peer 
+has multiple interfaces. This is the case for an increasing number of device 
+classes, as listed in Table \ref{table:typical-netifs}. In this work, we will 
+concentrate on consumer devices with Wi-Fi and cellular interfaces.
 
 % multiple network interfaces
 \begin{table}%
@@ -372,25 +410,11 @@ This section covers the background knowledge on Multipath TCP which is required 
 \end{table}
 
 
-\subsection{Implementations and Deployment}
-%We start by enumerating the current software implementations of Multipath TCP and giving some information on its current deployment.
-
-%reference(?) implementation in linux kernel
-The current reference implementation\footnote{\url{http://multipath-tcp.org/}} is based on the Linux kernel and maintained by \textcite{multipathtcp} at the Université Catholique de Louvain. A similar patch for the FreeBSD kernel has been developed at Swinburne University\footnote{\url{http://caia.swin.edu.au/newtcp/mptcp/}}.
-%https://support.apple.com/en-us/HT201373
- The first implementation of Multipath TCP was developed as a user-space proxy\footnote{\url{https://open-innovation.alcatel-lucent.com/projects/mptcp-proxy}} by Hampel at Bell Labs, and is no longer maintained. All aforementioned software is open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
-%other implementations
-The most widely deployed implementation is found in Apple's XNU kernel \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the Siri personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
-\textcite{Bonaventure2016Deploy} report a similar use by some cellular network operators. Hardware vendors include the Multipath TCP implementation in the Linux kernel of their Android phones. The cellular provider provides a SOCKS proxy server at carrier level. Together with a SOCKS proxy in the Android operating system, both using Multipath TCP, this allows combining Wi-Fi and cellular connectivity over existing infrastructure. 
-
-
 \subsection{Architecture of Multipath TCP}
 %Following that, we describe the architecture of the Multipath TCP protocol and implementation. 
 
-\begin{figure}
-	\includegraphics[width=0.9\textwidth]{mptcp-functional-decomposition.pdf}
-	\caption{Interaction of the functional building blocks of Multipath TCP as described in \cite{RFC6182}}
-\end{figure}
+\todo{Following that, we describe the architecture of the Multipath TCP protocol and implementation. }
+
 
 %\subsubsection{Path Management}
 
@@ -419,6 +443,7 @@ During the regular data transmission, the \textbf{DSS} option (Data Sequence Sig
 \subsection{Performance Evaluations}
 %We present studies evaluating and optimizing Multipath TCP performance, [...]
 
+\todo{We present studies evaluating and optimizing Multipath TCP performance, [...]}
 
 
 \subsection{Socket API}
@@ -440,6 +465,7 @@ They also recommend that socket options on a Multipath TCP meta-socket should be
 
 \subsection{Optimizing Multipath TCP Scheduling}
 
+\todo{?????}
 
 
 \subsection{Rule-Based Scheduler}
@@ -450,7 +476,7 @@ The rule-based scheduler by \textcite{RBS} is a programmable Multipath TCP sched
 
 In the later chapters, we show several scheduler scripts written in the RBS language. To allow the reader to follow these scripts, we give an introduction to the core objects used in the scripts.
 The syntax of RBS is similar to JavaScript, with the most obvious difference that keywords are written in upper-case. 
-The \code{Q} and \code{RQ} variables provide access to packet list objects, containing the sending queue and the retransmission queue, respectively. As long as any of these queues contains packets, the script is run in an implicit loop. Therefore, no loop over available packets is necessary in the script. The \code{SUBFLOWS} variable contains the list of all subflows. All lists can be filtered by invoking the \code{FILTER} method, as shown in \
+The \code{Q} and \code{RQ} variables provide access to packet list objects, containing the sending queue and the retransmission queue, respectively. As long as any of these queues contains packets, the script is run in an implicit loop. Therefore, no loop over available packets is necessary in the script. The \code{SUBFLOWS} variable contains the list of all subflows. All lists can be filtered by invoking the \code{FILTER} method, as shown in \todo{XXX}
 
 
 
@@ -668,13 +694,170 @@ The client's interfaces are either Wi-Fi and 3G/LTE, as found on smart phones, o
 %	- TCP Flow Control/Congestion Control
 
 
-
-
-\section{Analysis of web page behaviour} \label{approach-web-analysis}
+\section{Metrics for Web Performance } \label{metrics-web-perf}
 
 
 
-\section{Interaction between transport and application layer} \label{approach-interaction}
+When evaluating the performance of web page loads, there are several metrics 
+to look at. We use three timing metrics, which are available in the Google 
+Chrome web browser's developer tools.
+
+%Parameters/Properties/Values: (in order of usual occurence)
+% ...stimmt nicht,domcontentloaded und firstmeaningfulpaint können in beliebiger abfolge auftreten, je nach dem wie die webseite angelegt/optimiert ist
+
+
+% DOMContentLoaded
+The \textit{DOMContentLoaded} event is fired after the main HTML document has 
+been fully received and parsed by the browser \cite[section 12.2.6]{HtmlStandard}. 
+As the parsing is blocked by synchronous JavaScript\footnote{Modern browsers 
+use ``speculative parsing'', where parsing continues while waiting for the 
+synchronous JavaScript to be loaded and run. Still, the browser can only fire 
+\textit{DOMContentLoaded} after running all synchronous scripts, because 
+scripts could confuse\footnotemark~ the parser and force it to parse the code 
+after the \code{<script>} tag again.   
+}\footnotetext{\url{https://developer.mozilla.org/en-US/docs/Web/HTML/Optimizing_your_pages_for_speculative_parsing}}, 
+this event can't be fired before scripts have been downloaded and executed. 
+Loading style sheets does not block parsing, but it is recommended\footnote{%
+This recommendation is no longer valid for browsers which employ ``speculative 
+loading'', a technique where resources referenced after script tags are 
+downloaded in parallel.} to reference them before JavaScript files, so they 
+will usually be loaded as well. 
+%''The DOMContentLoaded event is fired when the initial HTML document has been completely loaded and parsed, without waiting for stylesheets, images, and subframes to finish loading.'' ~https://developer.mozilla.org/en/docs/Web/Events/DOMContentLoaded
+
+%browsers can render before domcontentloaded, but are very relucant to do so. only if loading the document itself takes several seconds, they start rendering. they display a white screen or the web page that was open before 
+
+
+% First Meaningful Paint
+The \textit{First Contentful Paint} is the time when the first text, image or 
+similar object is painted on screen. On most pages, the first object is a 
+header or navigation bar \cite{Sakamoto2016TTFMP}, making this metric less 
+useful for the purpose of measuring the time until useful content for the user 
+is visible. We use the \textit{First Meaningful Paint} metric instead, which 
+\textcite{Sakamoto2016TTFMP} defines as ``the time when page's primary content 
+appeared on the screen.'' They emphasize that ``[d]efinitions of primary 
+content differ depending on pages. For blog articles, it would be the headline 
++ above-the-fold text (and text must be visible -- not waiting for fonts). For 
+search engines, it would be search results. If an image is critical to the page 
+(e.g. e-commerce product page), then first meaningful paint requires it to be 
+visible.'' Therefore, to measure the first meaningful paint accurately, it would 
+be necessary for the user to define the primary content. In the developer tools 
+of Google Chrome, it is implemented using a heuristic based on the number of 
+layout objects, page height and web font loading.
+
+
+
+% Page Load Time (i.e. time until the onLoad event)
+The third metric we measure is the \textit{Page Load Time}, i.e. the time of 
+the \textit{load} event. This is the time it takes to load all embedded 
+resources, like style sheets, web fonts and images. 
+
+A Python script is used to instrument the browser to load pages, and to record 
+the times at which the events noted above occur over the Chrome Debugging 
+Protocol. This is described in detail in Section \ref{measurement-script} in 
+the implementation chapter.
+
+In addition to timing metrics, we also look at the amount of bytes transferred, 
+and the number of HTTP transactions made.
+At the browser level, we measure the amount of bytes transferred and the number 
+of transactions per request content type. This is further differentiated by 
+whether the request finished before or after the DOMContentLoaded event, as a 
+heuristic of whether the request was necessary for the initial rendering. We 
+would have preferred the First Meaningful Paint here, but it is not available 
+in real-time during the measurement.
+
+We also measure the amount of bytes transmitted and received at the network 
+level, so we can separately measure per subflow. This metric allows us to see 
+how well the scheduling algorithm makes use of multiple subflows. On the other 
+hand, if we have subflows with different cost, like metered mobile data, this 
+allows us to evaluate how cost-effective our algorithm is.
+
+
+
+
+\section{Analysis of Web Page Structure} \label{approach-web-analysis}
+
+
+Modern web pages consist of dozens of resources. In this section, we analyze 
+popular web pages with regards to the requests which are made by the browser 
+to load them. Requests can be categorized by their type, so first, we go 
+through the most common types of requests. 
+
+\subsection{Request Content Types}
+
+The \textit{Document} is the main HTML file which is loaded first. It is 
+strictly necessary for the browser to render the page. It is also usually 
+required for loading subsequent resources, because it contains their addresses. 
+This requirement can be avoided by using the HTTP/2 push feature, but this has 
+other drawbacks. Further \textit{Document} requests can be triggered by 
+subframes in the top document.
+
+\textit{Script} requests load either synchronous or asynchronous JavaScript 
+resources. The synchronous ones, \code{<script>} tags without the \code{async} 
+attribute are required by the browser to continue constructing the Document 
+Object Model (DOM) tree. They are loaded as soon as the tag is parsed by the 
+browser, and block the parsing and display of all content which is placed 
+after them in the document.
+
+\textit{Stylesheet}s are needed for the first layout cycle of the page, which 
+means usually that nothing is displayed to the user until they are fully 
+loaded. If they are loaded too slowly, the bare page without style sheets 
+applied will be displayed, leaving a bad user experience. If the page uses web 
+fonts, the text content of the page won't display until the corresponding 
+\textit{Font} requests have finished.
+
+\textit{Image}s can be loaded after the base frame of the site is visible, 
+especially if the image size is provided in the Document source. The same is 
+true for \textit{Media} like video and audio, as well as most \textit{XHR} 
+requests. 
+
+\subsection{}
+
+To acquire a general overview of structure of requests on popular web sites, 
+we took the 50 highest ranked sites
+%\footnote{The number 50 results from the fact that only the first 50 sites 
+%are available for free from the Alexa web site.}
+ from the Alexa top sites lists\footnote{\url{http://www.alexa.com/topsites}} 
+in the categories global, news and science. As only the home pages are listed, 
+we added twelve news articles from top international and German news sites. 
+We loaded these web pages in a web browser which we instrumented as described 
+in Section \ref{metrics-web-perf}. 
+
+%alexa_all - 50 top sites
+%alexa_news - 50 top news sites (these are the homepages of the news sites)
+%alexa_science 50 top sites form category 'science'
+%news_article - 12 news articles from news sites listed in alexa_news and some german news sites
+
+
+%note that we only measured requests before the onLoad event
+%- usually web sites are finished with the onLoad event
+%- e.g. google.com only starts loading its javascript after onLoad, but it is not necessary - site works without js
+%- 
+\begin{figure}
+	\includegraphics[width=0.9\textwidth]{wps-stackedSizeByCategory2.pdf}
+	\caption{Transferred Data For Loading Web Pages, Grouped By Page Category, 
+	Content Type And Relevance For DOM }
+\end{figure}
+
+\begin{figure}
+	\includegraphics[width=0.9\textwidth]{wps-stackedSize-newsArticles.pdf}
+	\caption{stackedSize-newsArticles}
+\end{figure}
+
+
+\begin{figure}
+	\includegraphics[width=0.9\textwidth]{wps-requestCountByCategory.pdf}
+	\caption{requestCountByCategory}
+\end{figure}
+
+\begin{figure}
+	\includegraphics[width=0.9\textwidth]{wps-originCountByCategory.pdf}
+	\caption{originCountByCategory}
+\end{figure}
+
+
+
+
+\section{Interaction between Transport and Application Layer} \label{approach-interaction}
 
 %Wie dem Scheduler mitteilen was er tun soll?
 %Problem: Wie erfolgt Kommunikation mit dem mptcp-scheduler? Zwischen mptcp und http2 sitzt in der regel noch tls! -> Paketinhalt für mptcp-scheduler nicht lesbar - evtl. über byte-counter
@@ -695,7 +878,8 @@ The other approach is to have several general scheduler algorithms, each with di
 We consider several optimization approaches based on our analysis of web page structure and the approach to pass hints about content and priority to the scheduler.
 
 
-\subsection{Switching the scheduler based on content type or priority}
+\subsection{Switching the Scheduler Based on Content Type or Priority}
+
 Many modern web pages consist of dozens of resources. They can be classified by their technical priority for rendering the page. 
 
 The \textit{Document} is the main HTML file which is loaded first. It is strictly necessary for the browser to render the page. It is also usually required for loading subsequent resources, because it contains their addresses. This requirement can be avoided by using the HTTP/2 push feature, but this has other drawbacks. 
@@ -727,7 +911,7 @@ After these high priority resources are sent out, a more bandwidth conserving sc
 
 
 
-\subsection{Aggressive transmission of last segments}
+\subsection{Aggressive Transmission of Last Segments}
 The transmitting application signals the state of its outgoing buffers to the scheduler. An interesting condition occurs when the HTTP server has no more data to send, and only a few segments are left in the scheduler's queue. This means only these few segments are missing so that a complete web page can be rendered for the user. The scheduler can try to push out the missing segments more aggressively: By temporarily ignoring the available congestion window for the left over bytes, or by retransmitting on all available subflows.
 
 
@@ -744,8 +928,82 @@ The information passed from the HTTP server to the MPTCP scheduler creates a sid
 
 %=====================================================================
 \chapter{Implementation}
-%=====================================================================
+%==============================================================================
 
+For this work, we implemented and modified several pieces of software. We 
+extended a web server to pass internal information to the kernel by setting TCP 
+socket options. Therefore, this chapter contains the reasoning behind our 
+choice of the web server to modify, as well as a detailed description of the 
+modifications made. Furthermore, we implemented a set of scripts to instrument 
+a web browser to load web pages, collect information about the process and 
+aggregate it together with information from the operating system's network layer. 
+We also extended a framework for the evaluation of different Multipath TCP 
+schedulers to run aforementioned client and server components. Finally, we 
+implemented a Multipath TCP scheduler as RBS script which takes advantage of the 
+hints given by the web server.
+
+
+\section{Choosing a Web Server Platform}
+
+Information about the contents of encrypted HTTP/2 application data is only 
+available with cooperation of the web server is required. More precisely, we 
+want to set socket options with hints for the scheduler, depending on 
+information from higher levels. Multiple web servers have been evaluated and 
+based on the criteria set out below, a suitable basis for the implementation 
+has been selected.
+
+To be considered, the server must support HTTP/2, and support it with at least 
+one common browser as client. As we want to implement low-level modifications 
+in the web server, the source code has to be available, and the license must 
+permit modifications. This is a strictly necessary criterion, but luckily, most 
+available web servers are permissively open source licensed under Apache, MIT 
+or similar licenses. To make the work more relevant for practical use, a 
+popular web server should be used. Therefore, we started our evaluation with 
+Apache HTTP Server and NGINX, the two most popular open source HTTP servers. 
+Apache HTTP Server internally uses the third-party library Nghttp2 for its 
+HTTP/2 support, which contains the reference HTTP/2 server implementation 
+Nghttpd, which we also evaluated and finally selected.
+
+
+% NGINX (Plus)
+% nginx has a open-source (community) and a ``enterprise'' version (NGINX Plus)
+The \textbf{Nginx} web server is available as Open-Source Nginx and as the 
+commercial, closed-source \textit{NGINX Plus}. Only the commercial edition 
+has full HTTP/2 support, while the open-source ngx\_http\_v2\_module\footnote{%
+\url{http://nginx.org/en/docs/http/ngx_http_v2_module.html}} lacks the 
+``Server Push'' feature.
+% only NGINX Plus has full HTTP/2 support, in the open source version e.g., no http2 push is supported
+
+
+% Apache HTTP Server
+% bucket brigades are too complicated...
+The \textbf{Apache HTTP Server} fully supports HTTP/2 with its mod\_http2 
+module. The module is based on Nghttp2, an HTTP/2 C library. We investigated 
+the inner workings of Apache HTTP Server, following the byte stream from 
+libnghttp2 to OpenSSL and finally the TCP socket. These internals are based on 
+the Apache Portable Runtime\footnote{\url{https://apr.apache.org/}} (APR) and 
+the concepts of Filters, Buckets, and Bucket Brigades.  To implement our 
+extension, we would have to add additional metadata to every Bucket, making 
+sure that it isn't lost in intermediate Filters. Another possibility is to add 
+a new type of metadata buckets\footnote{%
+\url{https://httpd.apache.org/docs/trunk/developer/output-filters.html}}, 
+inserting them between data buckets every time the metadata (e.g. content type) 
+changes.
+
+% Nghttpd
+Aside from the library, the Nghttp2 project also provides reference client, 
+server and proxy implementations. Their server, \textbf{Nghttpd}, promised to 
+be much less complex than Apache, while being still based on the same library. 
+It has only one layer of buffering between the ``output'' of libnghttp2 and 
+\code{SSL_write}, the ``input'' of OpenSSL, making it easy to pass along 
+metadata. Also, the whole server consists of just over 3000 total lines of 
+C++ code. This led us to use Nghttpd as the basis for our implementation.
+
+ 
+
+
+
+\section{Modifications to the Web Server}
 
 \begin{figure}[b]
 	\includegraphics[width=1\textwidth]{http2-awb-layers.pdf}
@@ -753,33 +1011,9 @@ The information passed from the HTTP server to the MPTCP scheduler creates a sid
 \end{figure}
 
 
-
-\section{Choosing a web server platform}
-
-To get information about the contents of the HTTP/2 application data, the cooperation of the web server is required. Multiple web servers have been evaluated and based on the criteria set out below, a suitable basis for the implementation has been selected.
-
-To be at all useful, the server must support HTTP/2, and support it with at least one common browser as client. As we want to implement low-level modifications in the web server, the source code has to be available, and the license must permit modifications. This is a strictly necessary criterion, but luckily, most available web servers are permissively open source licensed under Apache, MIT or similar licenses. To make the work more relevant for practical use, a popular web server should be used. Therefore, we started our evaluation with \textit{Apache HTTP Server} and \textit{nginx}, the two commonly used open source HTTP servers. We found that Apache HTTP Server internally uses the third-party library \textit{libnghttp} for its HTTP/2 support, which contains the reference HTTP/2 server implementation \textit{nghttpd}, which we also evaluated and finally selected.
-
-\subsection{Nginx}
-
-% nginx has a open-source (community) and a ``enterprise'' version (NGINX Plus)
-% only NGINX Plus has full HTTP/2 support, in the open source version e.g., no http2 push is supported
-
-
-\subsection{Apache HTTP Server}
-
-% too complex for evaluating 
-
-
-\subsection{Nghttpd}
-
-.....
-
-\section{Modifications to the Web Server}
-
 \subsection{RBS Specific Modifications}
 % selecting a RBS script for HTTP/2 connections (command line parameter)
-\begin{lstlisting}[label={lst:nghttpd_select_ruleset},caption={Extending Nghttpd's connection setup method to select a RBS script, excerpt of \code{HttpServer.cc}},numbers=left,firstnumber=281,linebackgroundcolor={\lstLinesAdded{284-295}}]
+\begin{lstlisting}[style=C_Code,label={lst:nghttpd_select_ruleset},caption={Extending Nghttpd's connection setup method to select a RBS script, excerpt of \code{HttpServer.cc}},numbers=left,firstnumber=281,linebackgroundcolor={\lstLinesAdded{284-295}}]
   void accept_connection(int fd) {
     util::make_socket_nodelay(fd);
 
@@ -823,7 +1057,7 @@ To be at all useful, the server must support HTTP/2, and support it with at leas
 According to the HTTP/2 protocol specification, each transaction, or combination of request and response, is processed in a stream. Accordingly, Nghttpd has a \code{Stream} class which is instantiated for each request and stores relevant information. We extended this class by a \code{scheduling_content_type} field, which is a simplified representation of the transactions content type.
 
 
-\begin{lstlisting}[label=lst:mptcp_is_temp_unavailable,caption={Nghttpd's \code{struct Stream}, excerpt of \code{HttpServer.h}
+\begin{lstlisting}[style=C_Code,label=lst:mptcp_is_temp_unavailable,caption={Nghttpd's \code{struct Stream}, excerpt of \code{HttpServer.h}
 %\footnote{url{https://github.com/multipath-tcp/mptcp/blob/e076f6be0f4b3d48d59c686d0a9ff4b87bc91a0f/net/mptcp/mptcp\_sched.c\#L39}}
 },numbers=left,firstnumber=142,linebackgroundcolor={\lstLinesAdded{156}}]
 struct Stream {
@@ -847,7 +1081,7 @@ struct Stream {
 \end{lstlisting}
 
 
-\begin{lstlisting}[numbers=left]
+\begin{lstlisting}[style=C_Code,numbers=left]
 592  unsigned int get_skb_property(const Config *config, int caller, nghttp2_frame *frame, Stream *stream) {
   [...]
 602    switch(config->mptcp_skb_property_mode) {
@@ -935,6 +1169,94 @@ struct Stream {
 
 
 
+%We use three timing metrics, which are available over the Chrome debugging protocol\footnote{\url{https://developer.chrome.com/devtools/docs/debugger-protocol}}, the protocol of the Google Chrome web browser's developer tools.
+
+\section{Instrumenting the Web Browser} \label{measurement-script}
+
+\begin{figure}
+	\includegraphics[width=0.8\textwidth, trim=0.25in 0.25in 0.25in 0.25in, clip]{chrome-tracing.pdf}
+	\caption{A sample interaction with the Chrome Tracing API}
+	\label{fig:chrome-tracing-api}
+\end{figure}
+
+In our analysis of web page structure, as well as in the later evaluations of 
+collaborative schedulers, we use several metric as described in Section 
+\ref{metrics-web-perf}. These are visible in the Google Chrome web browser's 
+developer tools, and are available via the Chrome Debugging Protocol\footnote{%
+\url{https://developer.chrome.com/devtools/docs/debugger-protocol}}. 
+We use this protocol from a Python script, \code{measure_web_requests.py}, to 
+instrument the web browser to navigate to pages we want to measure, and to 
+retrieve the network and tracing data.
+
+A sample interaction with the browser over the Chrome Debugging Protocol is 
+shown in Figure \ref{fig:chrome-tracing-api}. The script first starts a new 
+Chrome instance with special parameters to prevent interference: we disable 
+automatic updates, the popup blocker, welcome message, Google Translate, and 
+others. We also specify a new profile directory, to prevent distortion from 
+cached data from previous experiments. 
+After connecting over the Chrome Debugging Protocol, it enables \textit{Page} 
+and \textit{Network} related events and starts a new tracing session. Because 
+the tracing API uses its own timestamps, we need to synchronize it with wall 
+clock time first by calling \textit{recordClockSyncMarker}. This allows us to 
+combine tracing API timings with network API timings later.
+The script will then ask the browser to navigate to the page we want to 
+measure. While loading, the tracing component of Chrome stores all events in 
+an internal buffer. The network component sends us events of every resource 
+load in real time. We accumulate the number of requests and the response sizes, 
+grouped by origin (domain name and port) and by content type.
+
+As a result, the script prints a report as shown in Listing 
+\ref{lst:measure-web-requests-output}. In this example, the English homepage of 
+Wikipedia was loaded, which took 0.8 seconds in total. 310 kilobytes of data 
+were transmitted from three different origins. 
+In the second and third table, the column \texttt{\#req} shows the number of 
+requests from this origin or of this DataType, respectively. 
+The columns \code{xferAll} and \code{xferReady} give the kilobytes of data 
+transmitted before the \textit{load} and before the \textit{DOMDocumentLoaded} 
+event, respectively. The content types are listed in the third table. This 
+allows us to see that document and stylesheets were fully loaded before the 
+\textit{DOMDocumentLoaded} event, whereas most images loaded afterwards. 
+
+
+\begin{lstlisting}[label=lst:measure-web-requests-output,caption={
+	Excerpt from the output of \code{measure_web_requests.py}
+},keywords={},numbers=left,tabsize=8]
+(*\aftergroup\bfseries*)URL: https://en.wikipedia.org/wiki/Main_Page
+Timings:(*\aftergroup\mdseries*)
+0.0000  navigationStart
+0.0002  fetchStart
+0.0842  unloadEventStart
+0.0842  unloadEventEnd
+0.0845  domLoading
+0.1113  responseEnd
+0.2112  domInteractive
+0.2112  domContentLoadedEventStart
+0.2112  domContentLoadedEventEnd
+0.3612  firstLayout
+0.3708  firstPaint
+0.3708  firstTextPaint
+0.3708  firstContentfulPaint
+0.3708  firstImagePaint
+0.7463  domComplete
+0.7464  loadEventStart
+0.8080  loadEventEnd
+(*\aftergroup\bfseries*)before DOMContentReady: 64k
+before Load: 310k
+#req 	xferAll     	xferReady	origin(*\aftergroup\mdseries*)
+  16	   67.76k	    0.00k	upload.wikimedia.org
+  10	  241.99k	   64.32k	en.wikipedia.org
+   1	    1.06k	    0.00k	login.wikimedia.org
+  11	    0.00k	    0.00k	data:
+(*\aftergroup\bfseries*)#req	xferAll     	xferReady	DataType(*\aftergroup\mdseries*)
+   2	   17.34k	   17.34k	Stylesheet
+   1	   18.10k	   18.10k	Document
+  30	   93.55k	    5.05k	Image
+   5	  181.82k	   23.83k	Script
+\end{lstlisting}
+
+
+
+
 
 %=====================================================================
 \chapter{Evaluation}
@@ -1006,7 +1328,7 @@ There are sites which we can test unmodified, but where we should change things 
 
 
 
-\subsection{Handling dynamic and third party requests}
+\subsection{Handling Dynamic and Third Party Requests}
 
 As we found in Section \ref{approach-web-analysis}, most modern web sites request resources from third-party hosts, and refer to resources which are generated dynamically by the server, possibly changing with every request.
 We have to handle these cases in our evaluation. 
@@ -1032,39 +1354,6 @@ Simple JavaScript libraries (consisting of single files) were downloaded and ser
 %	Con: ...
 
 
-\section{Metrics For Evaluation Of Web Performance }
-
-\begin{wrapfigure}{r}{0.45\textwidth}
-	\includegraphics[width=0.45\textwidth, trim=0.25in 0.25in 0.25in 0.25in, clip]{chrome-tracing.pdf}
-	\caption{A sample interaction with the Chrome Tracing API}
-	\label{fig:chrome-tracing-api}
-\end{wrapfigure}
-
-
-When evaluating the performance of web page loads, there are several metrics to look at. We use three timing metrics, which are available over the Chrome debugging protocol\footnote{\url{https://developer.chrome.com/devtools/docs/debugger-protocol}}, the protocol of the Google Chrome web browser's developer tools.
-
-%Parameters/Properties/Values: (in order of usual occurence)
-
-
-% DOMContentLoaded
-The \textit{DOMContentLoaded} event is fired after the main HTML document has been fully received and parsed by the browser \cite[section 12.2.6]{HtmlStandard}. As the parsing is blocked by synchronous JavaScript, this event can't be fired before scripts have been downloaded and executed. Style sheets do not block parsing, but are recommended to be referenced before JavaScript files, so they will usually be loaded as well.
-
-The browser can start rendering the page before the DOM is fully loaded, but only does this if loading the DOM takes exceptionally long (multiple seconds). 
-%browsers can render before domcontentloaded, but are very relucant to do so. only if loading the document itself takes several seconds, they start rendering. they display a white screen or the web page that was open before 
-
-
-% First Meaningful Paint
-The \textit{First Contentful Paint} is the time when the first text, image or similar object is painted on screen. On most pages, the first object is a header or navigation bar \cite{Sakamoto2016TTFMP}, making this metric less useful for the purpose of measuring the time until useful content for the user is visible. We use the \textit{First Meaningful Paint} metric instead, which \textcite{Sakamoto2016TTFMP} defines as ``the time when page's primary content appeared on the screen.'' They emphasize that ``[d]efinitions of primary content differ depending on pages. For blog articles, it would be the headline + above-the-fold text (and text must be visible -- not waiting for fonts). For search engines, it would be search results. If an image is critical to the page (e.g. e-commerce product page), then first meaningful paint requires it to be visible.'' Therefore, to measure the first meaningful paint accurately, it would be necessary for the user to define the primary content. In the developer tools of Google Chrome, it is implemented using a heuristics based on the number of layout objects, page height and web font loading.
-
-
-
-% Page Load Time (i.e. time until the onLoad event)
-The third metric we measure is the \textit{Page Load Time}, i.e. the time of the \textit{load} event. This is the time it takes to load all embedded resources, like style sheets, web fonts and images. 
-
-A Python script is used to instrument the browser to load pages, and to record the times at which the events noted above occur over the Chrome debugging protocol. A sample interaction with the browser over the API is shown in Figure \ref{fig:chrome-tracing-api}.
-
-Additionally, we look at the amount of bytes transmitted and received per subflow. This metric allows us to see how well the scheduling algorithm makes use of multiple subflows. On the other hand, if we have subflows with different cost, like metered mobile data, this allows us to evaluate how cost-effective our algorithm is.
-
 
 \section{Measurement Environments}
 
@@ -1085,7 +1374,7 @@ We based our measurements on two different methods. We simulated network situati
 
 If there is a stall below the TCP layer, the TCP small queues \cite{LwnTSQ} algorithm ensures not too much data gets buffered in the fifos of network interfaces, e.g. when an applications send data faster than the network interface card can relay it. To do this, the algorithm checks \code{sk_wmem_alloc}, a field of the socket struct in the kernel, which stores the amount of memory currently used for the send buffer. The default multipath scheduler in the Linux kernel declares a subflow as temporarily unavailable if the underlying TCP socket is throttled, as seen in Listing \ref{lst:mptcp_is_temp_unavailable}. When using RBS, the information if a subflow is throttled is available as the property \code{<subflow>.THROTTLED} and can be considered in the scheduling decision.
 
-\begin{lstlisting}[label=lst:mptcp_is_temp_unavailable,caption={Excerpt from Multipath TCP Kernel, \code{net/mptcp/mptcp_sched.c}
+\begin{lstlisting}[style=C_Code,label=lst:mptcp_is_temp_unavailable,caption={Excerpt from Multipath TCP Kernel, \code{net/mptcp/mptcp_sched.c}
 %\footnote{url{https://github.com/multipath-tcp/mptcp/blob/e076f6be0f4b3d48d59c686d0a9ff4b87bc91a0f/net/mptcp/mptcp\_sched.c\#L39}}
 }]
 static bool mptcp_is_temp_unavailable(struct sock *sk,
@@ -1117,7 +1406,7 @@ This further lead us to a code comment in the Linux kernel which says that this 
 The reason is that the netem layer is designed to emulate delays in the \textit{network}, not \textit{network interface}, to test e.g. TCP congestion control algorithms. Therefore it needs to behave as if the delay occured after orphaning the socket buffer.  But we want do emulate delays in the \textit{network interface} in this case, so we change this behaviour by commenting out the call to \code{skb_orphan_partial} as shown in Listing \ref{lst:sch_netem}. To see if the call would have been normally made, we also added a debug output temporarily. This enabled us to test the TSQ throttling in our simulation with Mininet.
 
 
-\begin{lstlisting}[label=lst:sch_netem,caption={Modified version of Linux kernel 4.4, \code{net/sched/sch_netem.c}, line 398ff}]
+\begin{lstlisting}[style=RBS,label=lst:sch_netem,caption={Modified version of Linux kernel 4.4, \code{net/sched/sch_netem.c}, line 398ff},linebackgroundcolor={\lstLinesRemoved{13-14}\lstLinesAdded{16-18}}]
 /*
  * Insert one skb into qdisc.
  * Note: parent depends on return value to account for queue length.
@@ -1184,7 +1473,7 @@ A scheduler script was designed to send the images only over the ``cheap'' Wi-Fi
 %sudo python2 execute.py --congestion_control cubic --network badWifiHotspot -a http2 --scheduler 'min_rtt_ctype_aware.txt min_rtt_advanced.txt'
 %badwifi.ipynb
 
-\begin{lstlisting}[label=lst:sched_eval_a,caption={RBS Scheduler Script for Evaluation A (``Bad Wi-Fi'')},numbers=left]
+\begin{lstlisting}[style=RBS,label=lst:sched_eval_a,caption={RBS Scheduler Script for Evaluation A (``Bad Wi-Fi'')},numbers=left]
 /*
  * This scheduler sends packets on the subflow with the lowest RTT which has congestion window available
  *  ... except images, they are sent only on the "cheap" (non-backup) subflow (e.g. Wi-Fi instead of 3G)
