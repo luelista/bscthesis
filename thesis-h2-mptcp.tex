@@ -171,7 +171,7 @@
 % Title Page
 %=====================================================================
 
-\thesistitle{Optimierte Zusammenarbeit von HTTP/2 und Multipath TCP}{Optimizing Cooperation of HTTP/2 and Multipath TCP}
+\thesistitle{Optimized Cooperation of HTTP/2 and Multipath TCP}{Optimierte Zusammenarbeit von HTTP/2 und Multipath TCP}
 \author{Maxi Weller}
 \referee{Prof. Ralf Steinmetz}{Alexander Frömmgen}
 \department{Fachbereich Informatik}
@@ -679,26 +679,26 @@ HTTP/2 is better suited to use with Multipath TCP, as many small requests are co
 %Automatisches Aufbauen von Dependency Graphs
 
 
-\section{Cooperation of Application Layer and Transport Layer}
-
-% technical problems to be solved:
-% *api needs to be defined
-% *there might be a layer in between (Presentation Layer, TLS omnipresent today)
-
-There are two main technical challenges in cooperation between (network) layers:
-
-The first is that an adequate API needs to be defined. This is tricky especially in our case, the cooperation of application and transport layer, as one side is in user space and the other is a kernel component in modern operating systems.
-
-The second challenge results from the fact that these layers are not directly adjacent to each other: In our case it is TLS encryption, which operates in the presentation layer, making all application layer data opaque to layers below. Therefore, a side channel needs to be established to allow information flow around the TLS encryption.
-% see also: security considerations...
-
+\section{Cooperation of Protocol Layers}
 
 % research: what kinds of information that one layer has available, could provide an advantage to an other layer
 
-research: what kinds of information that one layer has available, could provide an advantage to an other layer
 
-\cite{Raisinghani_2004}
-\cite{nowlan2012unorderedtcp}
+
+\textcite{Raisinghani_2004} elaborate the various ways of providing feedback 
+across protocol layers. They say that the ``application layer can communicate 
+to other layers the application’s QoS needs, i.e. the delay tolerance, 
+acceptable delay variation, required throughput and acceptable packet loss 
+rate''. In detail, they list devices with multiple network interfaces as
+a potential application field for cross-layer feedback, because ``a wireless 
+LAN interface may provide lesser delays and higher throughput as compared to a 
+GPRS interface on the same device. Depending on the application or user needs,
+the network layer could select an appropriate network interface.'' 
+With Multipath TCP, we can do this even in a more fine-grained way, 
+
+
+\textcite{nowlan2012unorderedtcp} \todo{ inhalt kurz zusammenfassen}
+
 
 
 
@@ -887,6 +887,22 @@ in Section \ref{measurement-script}.
 
 \section{Interaction between Transport and Application Layer} \label{approach-interaction}
 
+%%%%%%%%%%%%%%%%%%% moved from background %%%%%%%%%%%%%%%%%%%%%
+%% technical problems to be solved:
+%% *api needs to be defined
+%% *there might be a layer in between (Presentation Layer, TLS omnipresent today)
+
+%There are two main technical challenges in cooperation between (network) layers:
+
+%The first is that an adequate API needs to be defined. This is tricky especially in our case, the cooperation of application and transport layer, as one side is in user space and the other is a kernel component in modern operating systems.
+
+%The second challenge results from the fact that these layers are not directly adjacent to each other: In our case it is TLS encryption, which operates in the presentation layer, making all application layer data opaque to layers below. Therefore, a side channel needs to be established to allow information flow around the TLS encryption.
+%% see also: security considerations...
+%%%%%%%%%%%%%%%%%%% ENDE moved from background %%%%%%%%%%%%%%%%%%%%%
+
+
+
+
 %Wie dem Scheduler mitteilen was er tun soll?
 %Problem: Wie erfolgt Kommunikation mit dem mptcp-scheduler? Zwischen mptcp und http2 sitzt in der regel noch tls! -> Paketinhalt für mptcp-scheduler nicht lesbar - evtl. über byte-counter
 
@@ -897,7 +913,13 @@ in Section \ref{measurement-script}.
 A decision we need to make is where to place the optimization logic. One approach is that the server tags every HTTP/2 frame with information like content or stream type, and the scheduler script decides that to do exactly. This way, there is maximum flexibility for the MPTCP configuration and the server doesn't need to know very much about MPTCP. On the other hand, we need special handling on the scheduler level for every application protocol we want to optimize.
 The other approach is to have several general scheduler algorithms, each with different performance trade-offs, while allowing the application to decide which scheduler algorithm should be enabled. This reduces the dependencies on the scheduler level, but requires more MPTCP specific decision making on the application level. 
 
-We take the former approach, where application specific hints are attached to the data stream, as it is passed down to the operating system. To pass the hints to the scheduler, we used a feature of the RBS. The application uses the \code{setsockopt} API call to set the hint for following data. It is valid until a different hint is set. Then, when the data is sent using the regular \code{write} call, the TCP stack records the current hint as metadata of the socket kernel buffer the data is stored in. 
+We take the former approach, where application specific hints are attached to 
+the data stream, as it is passed down to the operating system. To pass the 
+hints to the scheduler, we used a feature of the RBS. The application uses 
+the \code{setsockopt} API call to set the hint for following data. It is 
+valid until a different hint is set. Then, when the data is sent using the 
+regular \code{write} call, the TCP stack records the current hint as metadata 
+of the socket kernel buffer the data is stored in. 
 
 
 
@@ -1034,13 +1056,32 @@ C++ code. This led us to use Nghttpd as the basis for our implementation.
 
 \section{Modifications to the Web Server}
 
-\begin{figure}[b]
+Figure \ref{fig:annotated-data-path} visualizes the route of an HTTP request 
+through the different components of the Nghttpd web server. Nghttpd uses 
+libev for managing its control flow, an event loop library, which means the 
+program is structured in several event watcher functions, called from the 
+main loop, when, for example, data is available or can be sent through a 
+network socket, or when a timeout is reached. 
+
+\begin{figure}
 	\includegraphics[width=1\textwidth]{http2-awb-layers.pdf}
-	\caption{The annotated data's path through the application and network layer}
+	\caption{The annotated data's path through the application layer}
+	\label{fig:annotated-data-path}
 \end{figure}
 
 
-\subsection{RBS Specific Modifications}
+%\subsection{RBS Specific Modifications}
+One of these event watchers is \code{accept_connection}, which is called when 
+a new client connects. It creates a new instance of the \code{Http2Handler} 
+class, which, among other things, registers its \code{read_tls} and \code{
+write_tls} methods to be called when new data is received from the client or 
+can be sent out, respectively. We extend the connection setup code as shown 
+in Listing \ref{lst:nghttpd-select-ruleset} to select a RBS scheduler. This 
+is done via a special \code{setsockopt} call and is valid for the current 
+socket. The scheduler to select is configured via the command line argument 
+\code{--mptcp-ruleset}.
+
+
 % selecting a RBS script for HTTP/2 connections (command line parameter)
 \begin{lstlisting}[style=C_Code,label={lst:nghttpd-select-ruleset},caption={The extended Nghttpd connection setup method (from \code{HttpServer.cc})},numbers=left,firstnumber=281,linebackgroundcolor={\lstLinesAdded{284-295}}]
   void accept_connection(int fd) {
@@ -1079,12 +1120,20 @@ C++ code. This led us to use Nghttpd as the basis for our implementation.
 \end{lstlisting}
 
 
-
+\code{read_tls} reads data from the socket via OpenSSL's \code{SSL_read} 
+function, and calls \code{nghttp2_session_mem_recv}, a library function of 
+Libnghttp. The library parses the incoming data, and informs the main server 
+code over a callback of any new requests. 
 
 % each HTTP/2 request is internally a Stream (in spec+server)
 % store information about/in the stream: simplified content type -> priority
-According to the HTTP/2 protocol specification, each transaction, or combination of request and response, is processed in a stream. Accordingly, Nghttpd has a \code{Stream} class which is instantiated for each request and stores relevant information. We extended this class by a \code{scheduling_content_type} field, which is a simplified representation of the transaction's content type.
-
+According to the HTTP/2 protocol specification each new request is processed 
+in a separate stream. Accordingly, Nghttpd has a \code{Stream} structure 
+which is instantiated for each request and stores relevant information. We 
+extend this class as shown in listing \ref{lst:nghttpd-struct-stream} by a 
+\code{scheduling_content_type} field, which is a simplified representation of 
+the response's content type. The possible values of this field are declared 
+in listing \ref{lst:scheduling-content-type-decl}.
 
 \begin{lstlisting}[style=C_Code,label=lst:nghttpd-struct-stream,caption={The extended Nghttpd \code{Stream} structure (from \code{HttpServer.h})
 %\footnote{url{https://github.com/multipath-tcp/mptcp/blob/e076f6be0f4b3d48d59c686d0a9ff4b87bc91a0f/net/mptcp/mptcp\_sched.c\#L39}}
@@ -1111,9 +1160,46 @@ struct Stream {
 \end{lstlisting}
 
 
-We added a function \code{get_skb_property} which is called when the scheduling hint is needed to be passed down to the MPTCP stack. A command line parameter is used to select what data is used as the hint. With our optimized scheduler scripts, the content type is used, therefore mptcp-skb-prop should be set to \code{RBS_PROP_CONTENTTYPE}. For testing, we added other types of hints, like a counter which is incremented at every call to the function, and the type of HTTP/2 frame (see Section \ref{http2-frame-types}).
+The response to a request is generated in \code{Http2Handler::submit_response}
+ and subsequently enqueued in Libnghttp's internal buffer of outbound items 
+by calling \code{nghttp2_submit_response}. Another event watcher is \code{
+write_tls}, which is run whenever the socket signalizes that data can be sent 
+out. It serves two purposes: if data to be sent is available in \code{wb_}, 
+it sends it out over OpenSSL's \code{SSL_write}. \code{wb_} is an opaque 
+buffer of octets, which means no information about the nature of the data 
+inside is available at this point. It is used to decouple the generation of 
+HTTP/2 encoded data by Libnghttpd from the generation of TLS records by 
+OpenSSL. If this wasn't done, each TLS record could contain at most a single 
+HTTP/2 frame, which would be inefficient. If \code{wb_} is empty, \code{write_
+tls} runs \code{fillwb}, which fetches data to send from \code{nghttp2_session
+_mem_send}, and enqueues it in \code{wb_}.
+We extend this process with a linked list (shown in Listing \ref{lst:nghttpd-
+linkedlist-headers}) which can store metadata about the octets enqueued in 
+\code{wb_}, along with the amount of octets this metadata is valid for. \code{
+fillwb} enqueues and \code{write_tls} dequeues the metadata in lockstep with 
+the data. 
 
-\begin{lstlisting}[style=C_Code,numbers=left,label=lst:nghttpd-get_skb_property,caption={The \code{get_skb_property} function added to Nghttpd (\code{mptcp_rbs.c})}]
+\begin{lstlisting}[style=C_Code,label=lst:nghttpd-linkedlist-headers,caption={Declaration of the data structure for metadata storage (\code{mptcp_rbs.h})}]
+struct skb_prop_range {
+  struct skb_prop_range* next;
+  unsigned int frameLength;
+  unsigned int skbProperty;
+};
+
+unsigned int skb_prop_peek(struct skb_prop_range **list);
+void skb_prop_pop(struct skb_prop_range **list, unsigned int bytes);
+void skb_prop_push(struct skb_prop_range **list, unsigned int bytes, unsigned int skbProp);
+\end{lstlisting}
+
+The metadata is provided by the function \code{get_skb_property} in listing 
+\ref{lst:nghttpd-get_skb_property}. A command line parameter is used to 
+select what information is used as the hint. With our optimized scheduler 
+scripts, the \code{scheduling_content_type} is used, therefore mptcp-skb-prop 
+should be set to \code{RBS_PROP_CONTENTTYPE}. For testing, we added other 
+types of hints, like a counter which is incremented at every call to the 
+function, and the type of HTTP/2 frame (see Section \ref{http2-frame-types}).
+
+\begin{lstlisting}[style=C_Code,numbers=left,label=lst:nghttpd-get_skb_property,caption={The \code{get_skb_property} function added to Nghttpd (\code{HttpServer.cc})}]
 592  unsigned int get_skb_property(const Config *config, int caller, nghttp2_frame *frame, Stream *stream) {
 593    testCounter += 1;
   [...]
@@ -1130,6 +1216,7 @@ We added a function \code{get_skb_property} which is called when the scheduling 
 614    }
 615  }
 \end{lstlisting}
+
 
 
 
@@ -1200,6 +1287,18 @@ We added a function \code{get_skb_property} which is called when the scheduling 
 
 %we use the <packet>.USER property and/or registers R1..6 set by the application code
 %to choose the best possible scheduling preferences/modify the scheduling algorithm
+
+
+
+
+\begin{lstlisting}[style=RBS,label=lst:scheduling-content-type-decl,caption={Possible values of the USER field if simplified content types are used as hints.}]
+VAR SKB_CONTENT_NOSTREAM =  1;
+VAR SKB_CONTENT_DOCUMENT =  2;
+VAR SKB_CONTENT_SCRIPT   =  3;
+VAR SKB_CONTENT_STYLE    =  4;
+VAR SKB_CONTENT_IMAGE    =  5;
+VAR SKB_CONTENT_OTHER    =  6;
+\end{lstlisting}
 
 
 
@@ -1675,6 +1774,11 @@ Some optimizations rely on manually providing resource priorities and dependenci
 \printbibliography
 
 
+\chapter*{Appendices}
+
+\section*{Annex A: measure\_web\_requests.py}
+
+\lstinputlisting[language=Python]{measure_web_requests.py}
 
 
 \end{document}
