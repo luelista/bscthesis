@@ -515,8 +515,20 @@ The \code{Q} and \code{RQ} variables provide access to packet list objects, cont
 
 
 
-\subsubsection{Socket Buffers}
-
+\subsubsection{Socket Kernel Buffers} \label{skb-annotate}
+As a packet goes through the Linux network stack, it is stored in a socket 
+kernel buffer (SKB)\footnote{for more information, see 
+\url{http://vger.kernel.org/~davem/skb.html}}. When an application sends 
+data over a TCP connection, it can call the \code{write} method, which 
+will either append the data to an existing SKB, or store it in a newly 
+created one. 
+The SKB contains the data itself, pointers to the socket, network device 
+and various other structures, and a data area which can be used by the 
+transport protocol. For the RBS, this data area is extended to store the 
+\code{USER} field, a byte with user-defined meaning, which can be set by the 
+application and read by the scheduler script. The application can use the 
+\code{setsockopt} call to set the field value for the data which is sent with 
+the following \code{write}s.
 %something about the annotated socket buffers a.k.a. USER field ?
 
 
@@ -526,13 +538,15 @@ The \code{Q} and \code{RQ} variables provide access to packet list objects, cont
 
 \section{Presentation Layer: TLS}
 
-We need to consider Transport Layer Security (TLS) in this work as all browser implementations of the HTTP/2 protocol enforce the usage of encryption by TLS\footnote{\url{http://caniuse.com/\#search=http2}}.
+We need to consider Transport Layer Security (TLS) in this work as all browser 
+implementations of the HTTP/2 protocol enforce the usage of encryption by 
+TLS\footnote{\url{http://caniuse.com/\#search=http2}}.
 Put another way, to use HTTP/2, we need to use HTTPS. 
-The intermediate layer of TLS complicates the collaboration of application and transport layer. We can't look at the HTTP/2 traffic from our Multipath TCP scheduler, as it is always encrypted. We can't pass information about byte ranges of 
-
-
-On the other hand, TLS is relevant anyway for evaluations of web traffic, as it is used by a growing portion of web sites. \textcite{naylor2014cost} states that ``[i]n September 2014, 44.3\% of web connections already use HTTPS'', and according to Mozilla Telemetry\footnote{\url{https://telemetry.mozilla.org/new-pipeline/dist.html\#!cumulative=0&end_date=2017-03-24&keys=__none__!__none__!__none__&max_channel_version=release\%252F52&measure=HTTP_PAGELOAD_IS_SSL&min_channel_version=null&processType=*&product=Firefox!Fennec&sanitize=1&sort_keys=submissions&start_date=2017-03-02&table=0&trim=1&use_submission_date=0}}, 55\% of HTTP page loads were over SSL in March 2017.
-Therefore, we researched the performance impacts of TLS usage. 
+On the other hand, TLS is relevant anyway for evaluations of web traffic, as it 
+is used by a growing portion of web sites. \textcite{naylor2014cost} states 
+that ``[i]n September 2014, 44.3\% of web connections already use HTTPS'', and 
+according to Mozilla Telemetry\footnote{\url{https://telemetry.mozilla.org/new-pipeline/dist.html\#!cumulative=0&end_date=2017-03-24&keys=__none__!__none__!__none__&max_channel_version=release\%252F52&measure=HTTP_PAGELOAD_IS_SSL&min_channel_version=null&processType=*&product=Firefox!Fennec&sanitize=1&sort_keys=submissions&start_date=2017-03-02&table=0&trim=1&use_submission_date=0}}, 
+55\% of HTTP page loads were over SSL in March 2017. %Therefore, we researched the performance impacts of TLS usage. 
 % why we need to consider ssl
 % - x% of connections use ssl today
 
@@ -540,15 +554,26 @@ Therefore, we researched the performance impacts of TLS usage.
 %``the “S” is here to stay''
 
 
-OpenSSL will build a record from each call to SSL\_write \footnote{\url{https://www.imperialviolet.org/2010/06/25/overclocking-ssl.html}}
+The intermediate layer of TLS complicates the collaboration of application and 
+transport layer. We can't look at the HTTP/2 traffic from our Multipath TCP 
+scheduler, as it is always encrypted. We can't pass metadata based on byte 
+ranges or sequence numbers, either, because TLS chops the data into records, 
+adding headers in front and padding at the end of each record.
+
+What makes things easier, is the fact that the most common TLS library 
+``OpenSSL will build a record from each call to SSL\_write'' \cite{Langley2010}, 
+which means there is no internal buffering, which would further confuse the 
+relationship between plain and encrypted data. Therefore, it is possible to
+use the mechanism described in Section \ref{skb-annotate} to pass metadata
+to schedulers, and to view \code{SSL_write} as equivalent to \code{write}.
 %  therefore collab. via socket option no problem -> correctness
 
+%Closely related to this is the fact that choosing the right size for TLS record 
+%can have considerable impact on performance. 
 
-% performance consideration: (max.) TLS record size
 
 
-
-``the TLS standard provides a fast negotiation mechanism, which reduces the TCP+TLS handshake to 2 RTTs '' (session id)
+%``the TLS standard provides a fast negotiation mechanism, which reduces the TCP+TLS handshake to 2 RTTs'' (session id)
 
 
 
@@ -577,7 +602,9 @@ As opposed to older versions, HTTP/2 is based on long-lived TCP connections. The
 (general article about HTTP/2 as optimization of http)
 \cite{RFC7540_HTTP2}
 
-\subsection{Streams}
+\subsection{Frames and Frame Types} \label{http2-frame-types}
+
+\subsection{Streams and Priorities}
 
 \begin{tikzpicture}[->,>=stealth',shorten >=1pt,auto,node distance=2.8cm,
 	semithick]
@@ -619,7 +646,8 @@ http://http2.github.io/http2-spec/index.html\#StreamStates
 
 %HTTP/1.1 mostly benefits from Multipath TCP for larger file downloads because the TCP connections are often closed after one download, whereas the overhead of establishing auxilliary paths is not worthwile for downloading only one small file. In some studies it has been shown that the HTTP/1.1 performance is worse with MPTCP that with single path TCP on the same connection. Especially the common HTTP/1.1 optimization practice of sharding (spreading files among many different origins).
  
-Inherent in Multipath TCP operation is some overhead of discovering and establishing multiple paths when the connection is set up. Older versions of HTTP use many short-lived TCP connections, so the overhead of multipath initialization can shatter the performance improvements of Multipath TCP. Combined with unmatched expectations of the browser, there are situations where Multipath TCP can hurt the HTTP/1.1 performance compared with single path TCP \cite{han2015mwebmptcp}.
+Inherent in Multipath TCP operation is some overhead of discovering and establishing multiple paths when the connection is set up. Older versions of HTTP use many short-lived TCP connections, so the overhead of multipath initialization can shatter the performance improvements of Multipath TCP. Combined with unmatched expectations of the browser, there are situations where Multipath TCP can hurt the HTTP/1.1 performance compared with single path TCP \cite{han2015mwebmptcp}. However, when downloading large files over HTTP/1.1, it can benefit from combined throughput of multiple paths, as the overhead of establishing gets insignificant.
+HTTP/2 is better suited to use with Multipath TCP, as many small requests are coalesced into one long-running TCP connection.
 
 
 
@@ -717,10 +745,12 @@ scripts could confuse\footnotemark~ the parser and force it to parse the code
 after the \code{<script>} tag again.   
 }\footnotetext{\url{https://developer.mozilla.org/en-US/docs/Web/HTML/Optimizing_your_pages_for_speculative_parsing}}, 
 this event can't be fired before scripts have been downloaded and executed. 
-Loading style sheets does not block parsing, but it is recommended\footnote{%
-This recommendation is no longer valid for browsers which employ ``speculative 
-loading'', a technique where resources referenced after script tags are 
-downloaded in parallel.} to reference them before JavaScript files, so they 
+Loading style sheets does not block parsing, but it is recommended\footnote{\url{https://developer.yahoo.com/performance/rules.html\#css_top}}
+%\footnote{%
+%This recommendation is no longer valid for browsers which employ ``speculative 
+%loading'', a technique where resources referenced after script tags are 
+%downloaded in parallel.}
+ to reference them before JavaScript files, so they 
 will usually be loaded as well. 
 %''The DOMContentLoaded event is fired when the initial HTML document has been completely loaded and parsed, without waiting for stylesheets, images, and subframes to finish loading.'' ~https://developer.mozilla.org/en/docs/Web/Events/DOMContentLoaded
 
@@ -810,17 +840,15 @@ especially if the image size is provided in the Document source. The same is
 true for \textit{Media} like video and audio, as well as most \textit{XHR} 
 requests. 
 
-\subsection{}
+\subsection{Structure of Popular Web Pages}
 
-To acquire a general overview of structure of requests on popular web sites, 
-we took the 50 highest ranked sites
-%\footnote{The number 50 results from the fact that only the first 50 sites 
-%are available for free from the Alexa web site.}
- from the Alexa top sites lists\footnote{\url{http://www.alexa.com/topsites}} 
-in the categories global, news and science. As only the home pages are listed, 
-we added twelve news articles from top international and German news sites. 
+To acquire a general overview of the structure of requests on popular web 
+sites, we took the 50 highest ranked sites from the Alexa top sites 
+lists\footnote{\url{http://www.alexa.com/topsites}} in the categories global,
+news and science. As only the home pages are listed, we added twelve news 
+articles from top international and German news sites. 
 We loaded these web pages in a web browser which we instrumented as described 
-in Section \ref{metrics-web-perf}. 
+in Section \ref{measurement-script}. 
 
 %alexa_all - 50 top sites
 %alexa_news - 50 top news sites (these are the homepages of the news sites)
@@ -867,8 +895,9 @@ in Section \ref{metrics-web-perf}.
 %	- a: Server taggt Frames irgendwie, z.B. Inhalt=PageContent / Bild / Script / Style; Push=Ja/Nein; etc…, und Scheduler enthält die Logik die sagt was mit welchem Frame-Typ passieren soll
 %oder b: Server gibt genaue Anweisung an Scheduler, dieser setzt es nur um
 A decision we need to make is where to place the optimization logic. One approach is that the server tags every HTTP/2 frame with information like content or stream type, and the scheduler script decides that to do exactly. This way, there is maximum flexibility for the MPTCP configuration and the server doesn't need to know very much about MPTCP. On the other hand, we need special handling on the scheduler level for every application protocol we want to optimize.
-The other approach is to have several general scheduler algorithms, each with different performance trade-offs, while allowing the application to decide which scheduler algorithm should be enabled. This reduces the dependencies on the scheduler level, but required more MPTCP specific decision making on the application level. 
+The other approach is to have several general scheduler algorithms, each with different performance trade-offs, while allowing the application to decide which scheduler algorithm should be enabled. This reduces the dependencies on the scheduler level, but requires more MPTCP specific decision making on the application level. 
 
+We take the former approach, where application specific hints are attached to the data stream, as it is passed down to the operating system. To pass the hints to the scheduler, we used a feature of the RBS. The application uses the \code{setsockopt} API call to set the hint for following data. It is valid until a different hint is set. Then, when the data is sent using the regular \code{write} call, the TCP stack records the current hint as metadata of the socket kernel buffer the data is stored in. 
 
 
 
@@ -1013,7 +1042,7 @@ C++ code. This led us to use Nghttpd as the basis for our implementation.
 
 \subsection{RBS Specific Modifications}
 % selecting a RBS script for HTTP/2 connections (command line parameter)
-\begin{lstlisting}[style=C_Code,label={lst:nghttpd_select_ruleset},caption={Extending Nghttpd's connection setup method to select a RBS script, excerpt of \code{HttpServer.cc}},numbers=left,firstnumber=281,linebackgroundcolor={\lstLinesAdded{284-295}}]
+\begin{lstlisting}[style=C_Code,label={lst:nghttpd-select-ruleset},caption={The extended Nghttpd connection setup method (from \code{HttpServer.cc})},numbers=left,firstnumber=281,linebackgroundcolor={\lstLinesAdded{284-295}}]
   void accept_connection(int fd) {
     util::make_socket_nodelay(fd);
 
@@ -1054,12 +1083,12 @@ C++ code. This led us to use Nghttpd as the basis for our implementation.
 
 % each HTTP/2 request is internally a Stream (in spec+server)
 % store information about/in the stream: simplified content type -> priority
-According to the HTTP/2 protocol specification, each transaction, or combination of request and response, is processed in a stream. Accordingly, Nghttpd has a \code{Stream} class which is instantiated for each request and stores relevant information. We extended this class by a \code{scheduling_content_type} field, which is a simplified representation of the transactions content type.
+According to the HTTP/2 protocol specification, each transaction, or combination of request and response, is processed in a stream. Accordingly, Nghttpd has a \code{Stream} class which is instantiated for each request and stores relevant information. We extended this class by a \code{scheduling_content_type} field, which is a simplified representation of the transaction's content type.
 
 
-\begin{lstlisting}[style=C_Code,label=lst:mptcp_is_temp_unavailable,caption={Nghttpd's \code{struct Stream}, excerpt of \code{HttpServer.h}
+\begin{lstlisting}[style=C_Code,label=lst:nghttpd-struct-stream,caption={The extended Nghttpd \code{Stream} structure (from \code{HttpServer.h})
 %\footnote{url{https://github.com/multipath-tcp/mptcp/blob/e076f6be0f4b3d48d59c686d0a9ff4b87bc91a0f/net/mptcp/mptcp\_sched.c\#L39}}
-},numbers=left,firstnumber=142,linebackgroundcolor={\lstLinesAdded{156}}]
+},numbers=left,firstnumber=142,linebackgroundcolor={\lstLinesAdded{156-157}}]
 struct Stream {
   BlockAllocator balloc;
   RequestHeader header;
@@ -1074,23 +1103,29 @@ struct Stream {
   size_t header_buffer_size;
   int32_t stream_id;
   bool echo_upload;
-  uint32_t priority_file_type;   // --> for mptcp scheduler
+  // simplified content type, can be used as mptcp scheduler hint
+  uint32_t scheduling_content_type;
   Stream(Http2Handler *handler, int32_t stream_id);
   ~Stream();
 };
 \end{lstlisting}
 
 
-\begin{lstlisting}[style=C_Code,numbers=left]
+We added a function \code{get_skb_property} which is called when the scheduling hint is needed to be passed down to the MPTCP stack. A command line parameter is used to select what data is used as the hint. With our optimized scheduler scripts, the content type is used, therefore mptcp-skb-prop should be set to \code{RBS_PROP_CONTENTTYPE}. For testing, we added other types of hints, like a counter which is incremented at every call to the function, and the type of HTTP/2 frame (see Section \ref{http2-frame-types}).
+
+\begin{lstlisting}[style=C_Code,numbers=left,label=lst:nghttpd-get_skb_property,caption={The \code{get_skb_property} function added to Nghttpd (\code{mptcp_rbs.c})}]
 592  unsigned int get_skb_property(const Config *config, int caller, nghttp2_frame *frame, Stream *stream) {
+593    testCounter += 1;
   [...]
 602    switch(config->mptcp_skb_property_mode) {
-603      case RBS_PROP_FRAMETYPE:
-604        if (!frame) return 0;
-605         return frame->hd.type;
-606      case RBS_PROP_CONTENTTYPE:
-607        if (!stream) return SKB_CONTENT_NOSTREAM;
-608        return stream->scheduling_content_type;
+603      case RBS_PROP_CONTENTTYPE:
+604        if (!stream) return SKB_CONTENT_NOSTREAM;
+605        return stream->scheduling_content_type;
+606      case RBS_PROP_COUNTER:
+607        return testCounter;
+608      case RBS_PROP_FRAMETYPE:
+609        if (!frame) return 0;
+610         return frame->hd.type;
 	[...]
 614    }
 615  }
@@ -1180,7 +1215,7 @@ struct Stream {
 \end{figure}
 
 In our analysis of web page structure, as well as in the later evaluations of 
-collaborative schedulers, we use several metric as described in Section 
+collaborative schedulers, we use several metrics as described in Section 
 \ref{metrics-web-perf}. These are visible in the Google Chrome web browser's 
 developer tools, and are available via the Chrome Debugging Protocol\footnote{%
 \url{https://developer.chrome.com/devtools/docs/debugger-protocol}}. 
@@ -1219,7 +1254,7 @@ allows us to see that document and stylesheets were fully loaded before the
 
 
 \begin{lstlisting}[label=lst:measure-web-requests-output,caption={
-	Excerpt from the output of \code{measure_web_requests.py}
+   A report generated by \code{measure_web_requests.py}
 },keywords={},numbers=left,tabsize=8]
 (*\aftergroup\bfseries*)URL: https://en.wikipedia.org/wiki/Main_Page
 Timings:(*\aftergroup\mdseries*)
@@ -1254,8 +1289,9 @@ before Load: 310k
    5	  181.82k	   23.83k	Script
 \end{lstlisting}
 
-
-
+A condensed version of the output is appended to a logfile in CSV format. The 
+full results are also written to a machine-readable JSON file, which is then 
+used by an aggregation script in the scheduler evaluation framework.
 
 
 %=====================================================================
@@ -1263,7 +1299,7 @@ before Load: 310k
 %=====================================================================
 
 We start this chapter by a presentation of the evaluation setup and the reasoning behind the choices. This includes the software used, the data points collected, and the web sites to test the optimizations on.
-Thereafter, the gathered data is presented and analyzed.
+Thereafter, the gathered findings are presented and analyzed.
 
 
 % overview of the chapter
@@ -1559,12 +1595,19 @@ IF (!Q.EMPTY) {
 % oder images only one sbf
 
 
-\subsection{Evaluation B }
+\subsection{Evaluation B (``Lossy'') (TODO!)}
+\todo{TODO}
+
 
 %maybe redundant for ``important'' stuff?
 % ...combination, switch dependent on RTT and LOSS -- maybe do this in a separate Eval C
 
 
+
+
+
+\subsection{Evaluation C (``Combined'') (TODO!)}
+\todo{TODO}
 
 
 
@@ -1626,7 +1669,7 @@ Some optimizations rely on manually providing resource priorities and dependenci
 %=====================================================================
 
 
-\nocite{*}
+%\nocite{*}
 %\chapter{Bibliography}
 %\bibliography{thesis-h2-mptcp}{}
 \printbibliography
