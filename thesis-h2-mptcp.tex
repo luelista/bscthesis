@@ -72,7 +72,6 @@
 \definecolor{mymauve}{rgb}{0.58,0,0.82}
 
 \lstset{ %
-  escapeinside={(*}{*)},
   basicstyle=\footnotesize\ttfamily,        % the size of the fonts that are used for the code
   breakatwhitespace=false,         % sets if automatic breaks should only happen at whitespace
   breaklines=true,                 % sets automatic line breaking
@@ -536,7 +535,7 @@ the following \code{write}s.
 
 
 
-\section{Presentation Layer: TLS}
+\section{Presentation Layer: TLS} \label{tls-background}
 
 We need to consider Transport Layer Security (TLS) in this work as all browser 
 implementations of the HTTP/2 protocol enforce the usage of encryption by 
@@ -562,7 +561,7 @@ adding headers in front and padding at the end of each record.
 
 What makes things easier, is the fact that the most common TLS library 
 ``OpenSSL will build a record from each call to SSL\_write'' \cite{Langley2010}, 
-which means there is no internal buffering, which would further confuse the 
+which means there is no internal buffering, which otherwise would have further confused the 
 relationship between plain and encrypted data. Therefore, it is possible to
 use the mechanism described in Section \ref{skb-annotate} to pass metadata
 to schedulers, and to view \code{SSL_write} as equivalent to \code{write}.
@@ -603,6 +602,8 @@ As opposed to older versions, HTTP/2 is based on long-lived TCP connections. The
 \cite{RFC7540_HTTP2}
 
 \subsection{Frames and Frame Types} \label{http2-frame-types}
+
+On the wire, HTTP/2 is a framed protocol.
 
 \subsection{Streams and Priorities}
 
@@ -1057,7 +1058,9 @@ C++ code. This led us to use Nghttpd as the basis for our implementation.
 \section{Modifications to the Web Server}
 
 Figure \ref{fig:annotated-data-path} visualizes the route of an HTTP request 
-through the different components of the Nghttpd web server. Nghttpd uses 
+through the different components of the Nghttpd web server. In the figure, 
+the data in the write buffer is tagged with the combination of content 
+type and frame type (c.f. Section \ref{http2-frame-types}). Nghttpd uses 
 libev for managing its control flow, an event loop library, which means the 
 program is structured in several event watcher functions, called from the 
 main loop, when, for example, data is available or can be sent through a 
@@ -1070,7 +1073,7 @@ network socket, or when a timeout is reached.
 \end{figure}
 
 
-%\subsection{RBS Specific Modifications}
+\subsection{Initializing RBS Scheduler}
 One of these event watchers is \code{accept_connection}, which is called when 
 a new client connects. It creates a new instance of the \code{Http2Handler} 
 class, which, among other things, registers its \code{read_tls} and \code{
@@ -1079,7 +1082,7 @@ can be sent out, respectively. We extend the connection setup code as shown
 in Listing \ref{lst:nghttpd-select-ruleset} to select a RBS scheduler. This 
 is done via a special \code{setsockopt} call and is valid for the current 
 socket. The scheduler to select is configured via the command line argument 
-\code{--mptcp-ruleset}.
+\texttt{-{}-mptcp-ruleset}.
 
 
 % selecting a RBS script for HTTP/2 connections (command line parameter)
@@ -1119,7 +1122,7 @@ socket. The scheduler to select is configured via the command line argument
   }
 \end{lstlisting}
 
-
+\subsection{Recording the Content Type of Streams}
 \code{read_tls} reads data from the socket via OpenSSL's \code{SSL_read} 
 function, and calls \code{nghttp2_session_mem_recv}, a library function of 
 Libnghttp. The library parses the incoming data, and informs the main server 
@@ -1135,8 +1138,8 @@ extend this class as shown in listing \ref{lst:nghttpd-struct-stream} by a
 the response's content type. The possible values of this field are declared 
 in listing \ref{lst:scheduling-content-type-decl}.
 
-\begin{lstlisting}[style=C_Code,label=lst:nghttpd-struct-stream,caption={The extended Nghttpd \code{Stream} structure (from \code{HttpServer.h})
-%\footnote{url{https://github.com/multipath-tcp/mptcp/blob/e076f6be0f4b3d48d59c686d0a9ff4b87bc91a0f/net/mptcp/mptcp\_sched.c\#L39}}
+\begin{lstlisting}[style=C_Code,label=lst:nghttpd-struct-stream,caption={
+	The extended Nghttpd \code{Stream} structure (from \code{HttpServer.h})
 },numbers=left,firstnumber=142,linebackgroundcolor={\lstLinesAdded{156-157}}]
 struct Stream {
   BlockAllocator balloc;
@@ -1160,26 +1163,37 @@ struct Stream {
 \end{lstlisting}
 
 
-The response to a request is generated in \code{Http2Handler::submit_response}
- and subsequently enqueued in Libnghttp's internal buffer of outbound items 
-by calling \code{nghttp2_submit_response}. Another event watcher is \code{
-write_tls}, which is run whenever the socket signalizes that data can be sent 
-out. It serves two purposes: if data to be sent is available in \code{wb_}, 
-it sends it out over OpenSSL's \code{SSL_write}. \code{wb_} is an opaque 
-buffer of octets, which means no information about the nature of the data 
-inside is available at this point. It is used to decouple the generation of 
-HTTP/2 encoded data by Libnghttpd from the generation of TLS records by 
-OpenSSL. If this wasn't done, each TLS record could contain at most a single 
-HTTP/2 frame, which would be inefficient. If \code{wb_} is empty, \code{write_
-tls} runs \code{fillwb}, which fetches data to send from \code{nghttp2_session
-_mem_send}, and enqueues it in \code{wb_}.
-We extend this process with a linked list (shown in Listing \ref{lst:nghttpd-
-linkedlist-headers}) which can store metadata about the octets enqueued in 
-\code{wb_}, along with the amount of octets this metadata is valid for. \code{
-fillwb} enqueues and \code{write_tls} dequeues the metadata in lockstep with 
-the data. 
+% content type 
+The response to a request is generated in \code{prepare_response}. There, the 
+request URL is parsed to find the file which should be delivered to the 
+client. We extended this with primitive mechanism for categorizing file types 
+based on the file extension, as well as a query string parser. The query 
+parameter \code{rbs_content_type} allows overriding the automatically 
+assigned file type. Finally, the response is enqueued in Libnghttp's internal 
+buffer of outbound items by calling \code{nghttp2_submit_response}. The 
+modifications are reproduced in Annex B.
 
-\begin{lstlisting}[style=C_Code,label=lst:nghttpd-linkedlist-headers,caption={Declaration of the data structure for metadata storage (\code{mptcp_rbs.h})}]
+\subsection{Retrieving and Buffering Meta Information}
+
+The event watcher \code{write_tls} is run whenever the socket signalizes that 
+data can be sent out. It serves two purposes: if data to be sent is available 
+in \code{wb_}, it sends it out over OpenSSL's \code{SSL_write}. \code{wb_} is 
+an opaque buffer of octets, which means no information about the nature of the 
+data inside is available at this point. It is used to decouple the generation 
+of HTTP/2 encoded data by Libnghttpd from the generation of TLS records by 
+OpenSSL. If this wasn't done, each TLS record could contain at most a single 
+HTTP/2 frame, which would be inefficient. If \code{wb_} is empty, 
+\code{write_tls} runs \code{fill_wb}, which fetches outgoing data from 
+\code{nghttp2_session_mem_send}, and enqueues it in \code{wb_}. We extend this 
+process with a FIFO implemented as a linked list as declared in listing 
+\ref{lst:nghttpd-linkedlist-headers}. The FIFO stores metadata about the 
+octets enqueued in \code{wb_}, along with the number of octets this metadata 
+is valid for. \code{fill_wb} enqueues and \code{write_tls} dequeues the 
+metadata in lockstep with the data. In listing \ref{lst:nghttpd-fill_wb} the 
+code for enqueueing the meta information is highlighted.
+
+\begin{lstlisting}[style=C_Code,label=lst:nghttpd-linkedlist-headers,caption={
+Declaration of the data structure for metadata storage (from \code{mptcp_rbs.h})}]
 struct skb_prop_range {
   struct skb_prop_range* next;
   unsigned int frameLength;
@@ -1191,15 +1205,38 @@ void skb_prop_pop(struct skb_prop_range **list, unsigned int bytes);
 void skb_prop_push(struct skb_prop_range **list, unsigned int bytes, unsigned int skbProp);
 \end{lstlisting}
 
+
+\begin{lstlisting}[style=C_Code,label=lst:nghttpd-fill_wb,caption={
+	Fetching and forwarding data and meta information (from 
+	\code{HttpServer.cc}, method \code{Http2Handler::fill_wb})
+},linebackgroundcolor={\lstLinesAdded{11-13,15-16}}]
+    const uint8_t *data;
+    // pick up some data from nghttp2's outbound item queue
+    auto datalen = nghttp2_session_mem_send(session_, &data);
+    [...]
+    // enqueue the data in the write buffer
+    auto n = wb_.write(data, datalen);
+    [...]
+    // get meta information about the data block
+    unsigned int mySkbProp = get_skb_property(
+	    get_config(), FROM_FILL_WB, &session_->aob.item->frame, stream);
+    // store the meta information, noting it is valid for the next 'datalen' octets
+    skb_prop_push(&skbProp, datalen, mySkbProp);
+\end{lstlisting}
+
+
+
+
 The metadata is provided by the function \code{get_skb_property} in listing 
 \ref{lst:nghttpd-get_skb_property}. A command line parameter is used to 
-select what information is used as the hint. With our optimized scheduler 
+configure what information to use as the hint. With our optimized scheduler 
 scripts, the \code{scheduling_content_type} is used, therefore mptcp-skb-prop 
 should be set to \code{RBS_PROP_CONTENTTYPE}. For testing, we added other 
 types of hints, like a counter which is incremented at every call to the 
 function, and the type of HTTP/2 frame (see Section \ref{http2-frame-types}).
 
-\begin{lstlisting}[style=C_Code,numbers=left,label=lst:nghttpd-get_skb_property,caption={The \code{get_skb_property} function added to Nghttpd (\code{HttpServer.cc})}]
+\begin{lstlisting}[style=C_Code,numbers=left,label=lst:nghttpd-get_skb_property,caption={
+The \code{get_skb_property} function added to Nghttpd (from \code{HttpServer.cc})}]
 592  unsigned int get_skb_property(const Config *config, int caller, nghttp2_frame *frame, Stream *stream) {
 593    testCounter += 1;
   [...]
@@ -1218,11 +1255,33 @@ function, and the type of HTTP/2 frame (see Section \ref{http2-frame-types}).
 \end{lstlisting}
 
 
-
+\subsection{Passing Meta Information to the Multipath TCP Scheduler}
 
 % setting scheduling hints as RBS_USER socket option
 
-% content type 
+To provide our meta information to the Multipath TCP scheduler as scheduling 
+hints, we use the socket option API. As suggested above, \code{write_tls} 
+sends out data from the write buffer to OpenSSL whenever the socket 
+signalizes that data can be sent out. Before doing so, it relays the current 
+meta information from the FIFO to the TCP stack. Only after writing out the 
+data we can be sure how many octets were really written. Then we remove this 
+number of octets from the write buffer and from the metadata FIFO. This is 
+implemented by the code in listing \ref{lst:nghttpd-write_tls-metarelay}.
+
+\begin{lstlisting}[style=C_Code,label=lst:nghttpd-write_tls-metarelay,caption={
+Relaying metadata (from \code{HttpServer.cc}, method \code{Http2Handler::write_tls})}]
+      // relay metadata from FIFO to OS
+      rbs_set_skb_property(fd_, skb_prop_peek(&skbProp));
+      [...]
+      auto rv = SSL_write(ssl_, wb_.pos, bytesToWrite);
+
+      if (rv <= 0) {  // handle errors
+        [...]
+      }
+      // drain metadata and data FIFOs
+      skb_prop_pop(&skbProp, rv);
+      wb_.drain(rv);
+\end{lstlisting}
 
 
 
@@ -1230,68 +1289,63 @@ function, and the type of HTTP/2 frame (see Section \ref{http2-frame-types}).
 \subsection{TLS}
 
 % newer openssl version (apls support)
+HTTP/2 can be used over the same TCP port as older versions, so browser and 
+server need to negotiate the version. When using HTTP/2 over TLS, as is the 
+only way to use in current browsers, this negotiation is done during the TLS 
+handshake. Two different protocol extensions to TLS have been defined for 
+this purpose. The older one, Next Protocol Negotiation (NPN) was defined in 
+2012 for the SPDY protocol, a precursor of HTTP/2. It is replaced by 
+Application Layer Protocol Negotiation, defined in 2014 by RFC 7301. The two 
+protocols are very similar, but modern versions of Chrome and Firefox only 
+support APLN, while OpenSSL version 1.0.1, which is available in Debian and 
+Ubuntu repositories only supports NPN. Therefore, we built a more recent 
+OpenSSL version and used Nghttpd with it.
+
 
 % changing the maximum ssl record size
+As explained in Section \ref{tls-background}, we were concerned with TLS 
+record sizes and boundaries. We therefore added the 
+\texttt{-{}-max-ssl-record-size} command line option to Nghttpd. This allows 
+us to modify the maximum size of TLS records. This is implemented by capping 
+the maximum number of bytes to write which is specified when calling 
+\code{SSL_write} from the \code{Http2Handler::write_tls} method.
 
-\begin{tikzpicture}[->,>=stealth',shorten >=1pt,auto,node distance=1.1cm,
-		semithick]
-	\tikzstyle{every state}=[draw, rectangle,
-	execute at begin node={\begin{varwidth}{21em}},
-	execute at end node={\end{varwidth}}]
-
-	\node[initial,state](s1){HttpServer::run()};
-	\node[state,below=of s1](s2){SSL\_CTX\_new \\(SSLv23\_server\_method())};
-	\node[state,below=of s2](s3){ TLS\_server\_method  };
-	\node[state,below=of s3](s4){ ssl3\_read/ ssl3\_write/ ssl3\_write\_bytes, tls1\_new/clear/free };
-
-
-	\node[state,right=of s1](s6){  Http2Handler::fill\_wb };
-	\node[state,below=of s6](s7){  nghttp\_session\_mem\_write };
-	\node[state,below=of s7](s8){  Http2Handler::wb\_ };
-
-
-
-	\node[state,right=of s6](s9){  Http2Handler::write\_tls };
-	\node[state,below=of s9](sa){  SSL\_write };
-	\node[state,below=of sa](sb){  s->method->write };
-	\node[state,below=of sb](sc){  ssl3\_write\_bytes };
-	\node[state,below=of sc](sd){  do\_ssl3\_write };
-	\node[state,below=of sd](se){  ssl3\_write\_pending };
-	\node[state,below=of se](sf){  BIO\_write };
-	\node[state,below=of sf](sg){  sock\_write };
-	\node[state,below=of sg](sh){  write (syscall) };
-
-	\path (s1) edge (s2)
-	(s2) edge node {\#defined as} (s3)
-	(s3) edge node { IMPLEMENT\_ \\ tls\_meth\_func} (s4)
-
-	(s6) edge (s7)
-	(s7) edge (s8)
-
-	(s9) edge (sa)
-	(sa) edge (sb)
-	(sb) edge node {function ptr. to} (sc)
-	(sc) edge (sd)
-	(sd) edge (se)
-	(se) edge (sf)
-	(sf) edge (sg)
-	(sg) edge (sh)
-	;
-
-
-\end{tikzpicture}
+\begin{lstlisting}[style=C_Code,caption={
+Limiting the number of bytes in a TLS record (from \code{HttpServer.cc}, 
+method \code{Http2Handler::write_tls})}]
+      auto bytesToWrite = wb_.rleft();
+      if (bytesToWrite > get_config()->max_ssl_record_size)
+			bytesToWrite = get_config()->max_ssl_record_size;
+      auto rv = SSL_write(ssl_, wb_.pos, bytesToWrite);
+\end{lstlisting}
 
 
 
-\section{Schedulers}
+
+\section{Combining Nghttpd and RBS Schedulers} \label{nghttpd-query-params}
+
+\paragraph{Command Line Arguments}
+
+\texttt{-{}-mptcp-ruleset}
+
+\texttt{-{}-mptcp-skb-prop}
+
+\paragraph{URL Query Parameters}
+
+\code{rbs_content_type}
+
+\texttt{rbs\_set\_R\textit{<n>}}
+
 
 %we use the <packet>.USER property and/or registers R1..6 set by the application code
 %to choose the best possible scheduling preferences/modify the scheduling algorithm
 
 
+\paragraph{Scheduler Registers and USER Field}
 
 
-\begin{lstlisting}[style=RBS,label=lst:scheduling-content-type-decl,caption={Possible values of the USER field if simplified content types are used as hints.}]
+\begin{lstlisting}[style=RBS,label=lst:scheduling-content-type-decl,caption={
+Possible values of the USER field if simplified content types are used as hints.}]
 VAR SKB_CONTENT_NOSTREAM =  1;
 VAR SKB_CONTENT_DOCUMENT =  2;
 VAR SKB_CONTENT_SCRIPT   =  3;
@@ -1354,7 +1408,7 @@ allows us to see that document and stylesheets were fully loaded before the
 
 \begin{lstlisting}[label=lst:measure-web-requests-output,caption={
    A report generated by \code{measure_web_requests.py}
-},keywords={},numbers=left,tabsize=8]
+},keywords={},numbers=left,tabsize=8,escapeinside={(*}{*)}]
 (*\aftergroup\bfseries*)URL: https://en.wikipedia.org/wiki/Main_Page
 Timings:(*\aftergroup\mdseries*)
 0.0000  navigationStart
@@ -1497,6 +1551,9 @@ We based our measurements on two different methods. We simulated network situati
 
 \subsection{Mininet}
 
+As a virtual network environment, we use Mininet, ``a system for rapidly 
+prototyping large networks on the constrained resources of a single laptop'', 
+by \textcite{Lantz10Mininet}.
 \todo{short intro to mininet}
 
 \todo{our setup with mininet}
@@ -1705,8 +1762,8 @@ IF (!Q.EMPTY) {
 
 
 
-\subsection{Evaluation C (``Combined'') (TODO!)}
-\todo{TODO}
+%\subsection{Evaluation C (``Combined'') (TODO!)}
+%\todo{TODO}
 
 
 
@@ -1780,5 +1837,86 @@ Some optimizations rely on manually providing resource priorities and dependenci
 
 \lstinputlisting[language=Python]{measure_web_requests.py}
 
+
+\section*{Annex B: prepare\_response}
+
+\begin{lstlisting}[style=C_Code]
+void prepare_response(Stream *stream, Http2Handler *hd,
+                      bool allow_push = true) {
+  [...]
+
+  StringRef raw_path, raw_query;
+  auto query_pos = std::find(std::begin(reqpath), std::end(reqpath), '?');
+  if (query_pos != std::end(reqpath)) {
+    // Do not response to this request to allow clients to test timeouts.
+    if (util::streq_l("nghttpd_do_not_respond_to_req=yes",
+                      StringRef{query_pos, std::end(reqpath)})) {
+      return;
+    }
+    const char* pos=(char*)query_pos;
+    while(*pos!='\0') {
+      if (*pos != '&' && *pos != '?') break;
+      pos++;
+      // set multipath tcp scheduler register
+      //printf("query string parser: '%s'\n", pos);
+      if (strncmp("rbs_set_R",pos,9)==0) {
+        pos+=9;
+        int regnum = strtol(pos, (char**)&pos, 10);
+        //printf("query string parser 2: '%s'\n", pos);
+        if (*pos != '=') break;
+        pos++;
+        int regval = strtol(pos, (char**)&pos, 0);
+        if (regnum < 1 || regnum > 6) break;
+        //printf("setting R%d = %d from query param\n", regnum, regval);
+        hd->set_rbs_register(regnum, regval);
+      } else if (strncmp("rbs_user=",pos,9)==0) {
+        pos+=9;
+        int regval = strtol(pos, (char**)&pos, 0);
+        //printf("setting user value for stream #%d = %d from query param\n", stream->stream_id, regval);
+        stream->priority_file_type = regval;
+      }
+    }
+    raw_path = StringRef{std::begin(reqpath), query_pos};
+    raw_query = StringRef{query_pos, std::end(reqpath)};
+  } else {
+    raw_path = reqpath;
+  }
+
+  [...]
+
+  auto ext = file_path.c_str() + file_path.size() - 1;
+  for (; file_path.c_str() < ext && *ext != '.' && *ext != '/'; --ext)
+    ;
+  if (*ext == '.') {
+    ++ext;
+    // only set content type if it was not overwritten by GET parameter earlier in this function
+    if (stream->priority_file_type == 0) {
+      // primitive file type categorization for scheduling
+      if (!strcasecmp(ext, "jpg") || !strcasecmp(ext, "png") || !strcasecmp(ext, "gif")) {
+        stream->priority_file_type = SKB_CONTENT_IMAGE;
+      } else if (!strcmp(ext, "js")) {
+        stream->priority_file_type = SKB_CONTENT_SCRIPT;
+      } else if (!strcmp(ext, "css") || !strcmp(ext, "woff") || !strcmp(ext, "woff2")) {
+        stream->priority_file_type = SKB_CONTENT_STYLE;
+      } else if (!strcmp(ext, "html") || !strcmp(ext, "htm")) {
+        stream->priority_file_type = SKB_CONTENT_DOCUMENT;
+      } else {
+        stream->priority_file_type = SKB_CONTENT_OTHER;
+      }
+      printf("FILE EXT '%s' ", ext);
+    } else 
+        printf("FILE from para");
+
+  } else 
+      printf("FILE no ext  ");
+
+  printf(" -> TYPE %s   '%s' \n", SKB_CONTENT_TYPES[stream->priority_file_type], file_path.c_str());
+
+  [...]
+
+  hd->submit_file_response(StringRef::from_lit("200"), stream, file_ent->mtime,
+                           file_ent->length, file_ent->content_type, &data_prd);
+}
+\end{lstlisting}
 
 \end{document}
