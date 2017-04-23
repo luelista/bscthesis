@@ -227,7 +227,7 @@ In the following paragraphs, we describe the motivation for the relatively recen
 %---------------------------------------------------------------------
 
 \begin{wrapfigure}{r}{0.45\textwidth}
-	\includegraphics[width=0.4\textwidth]{mux-demux.pdf}
+	\includegraphics[width=0.45\textwidth]{mux-demux.pdf}
 	\caption{Optimization across layers}
 \end{wrapfigure}
 
@@ -277,7 +277,7 @@ Even more information about the state of higher level protocols can be gained by
 % solution / our approach: the implementation of the higher level protocol provides special scheduling hints to the mptcp scheduler
 % pro
 % - no detailed knowledge about the protocol is neccessary in the scheduler
-% - with a good api, the scheduler needs to know nothing about the specific application level protocol, while the app level proto implementation needs to know (almost) nothing about the network level scheduling
+% - with a good api, the scheduler needs to know nothing about the specific application level protocol, while the app level proto implementation needs to know (almost) nothing about the transport level scheduling
 % contra
 % - every application which should take advantage of this approach needs to be specifically modified
 % - 
@@ -314,7 +314,7 @@ In the following chapter, we introduce the protocols on which this work is based
 Chapter four starts with an analysis of typical web page structures, details our approach for passing scheduling hints from application to transport layer and presents optimized MPTCP scheduler rules for different network scenarios. We also consider security concerns regarding the scheduling hints as a side channel to TLS encryption.
 
 %implementation
-Following our approach of integrating multiple layers, the implementation described in chapter five ranges from the network layer up to the application layer. Optimized schedulers were realized with a scripting-enabled rule based scheduler in the Linux kernel. After conducting a survey of web server software, we choose one to customize. This is necessary to pass information about HTTP transactions down the stack, bypassing encryption. On top of that, we created sample web pages and applications.
+Following our approach of integrating multiple layers, the implementation described in chapter five ranges from the transport layer up to the application layer. Optimized schedulers were realized with a scripting-enabled rule based scheduler in the Linux kernel. After conducting a survey of web server software, we choose one to customize. This is necessary to pass information about HTTP transactions down the stack, bypassing encryption. On top of that, we created sample web pages and applications.
 
 
 %evaluation
@@ -434,15 +434,10 @@ Therefore, Multipath TCP subflows look and behave on the wire exactly like regul
 
 When a new Multipath TCP connection is set up, the \textbf{MP\_CAPABLE} option is included in the SYN segment. From this options, the server learns that the new client supports MPTCP. In the responding SYN-ACK and ACK segments, the MP\_CAPABLE option is included as well, serving as a handshake, in which authentication keys are exchanged. These keys are later used in the process of adding more subflows to the connection.
 
-New subflows are initiated by establishing what looks like a regular TCP connection at to the network, but contains the \textbf{MP\_JOIN} option in the three-way handshake segments. The contents of this option depends on the stage of the handshake. The initiator sends an identifying token, which is based on the authentication keys.  In the first two segments, random numbers (nonces) are exchanged. To authenticate each other, the peers exchange HMACs of the concatenated nonces keyed on the concatenated authentication keys in the second and third segment.
+New subflows are initiated by establishing what looks like a regular TCP connection to the network, but contains the \textbf{MP\_JOIN} option in the three-way handshake segments. The contents of this option depends on the stage of the handshake. The initiator sends an identifying token, which is based on the authentication keys.  In the first two segments, random numbers (nonces) are exchanged. To authenticate each other, the peers exchange HMACs of the concatenated nonces keyed on the concatenated authentication keys in the second and third segment.
 
 During the regular data transmission, the \textbf{DSS} option (Data Sequence Signal) is added to every segment. It contains sequence numbers and acknowledgements, which work very similar to their TCP counterparts. They are necessary to ensure ordered data transfer across subflows, and to retransmit segments in case of collapse of a subflow.
 
-
-\subsection{Performance Evaluations}
-%We present studies evaluating and optimizing Multipath TCP performance, [...]
-
-\todo{We present studies evaluating and optimizing Multipath TCP performance, [...]}
 
 
 \subsection{Socket API}
@@ -461,10 +456,15 @@ They also recommend that socket options on a Multipath TCP meta-socket should be
 
 
 
+\subsection{Performance Evaluations}
+%We present studies evaluating and optimizing Multipath TCP performance, [...]
+
+\todo{We present studies evaluating and optimizing Multipath TCP performance, [...]}
+
 
 \subsection{Optimizing Multipath TCP Scheduling}
 
-\todo{?????}
+\todo{merge wth above?}
 
 
 \subsection{Rule-Based Scheduler}
@@ -475,9 +475,21 @@ The rule-based scheduler by \textcite{RBS} is a programmable Multipath TCP sched
 
 In the later chapters, we show several scheduler scripts written in the RBS language. To allow the reader to follow these scripts, we give an introduction to the core objects used in the scripts.
 The syntax of RBS is similar to JavaScript, with the most obvious difference that keywords are written in upper-case. 
-The \code{Q} and \code{RQ} variables provide access to packet list objects, containing the sending queue and the retransmission queue, respectively. As long as any of these queues contains packets, the script is run in an implicit loop. Therefore, no loop over available packets is necessary in the script. The \code{SUBFLOWS} variable contains the list of all subflows. All lists can be filtered by invoking the \code{FILTER} method, as shown in \todo{XXX}
 
+\paragraph{Available Variables}
+The \code{Q} and \code{RQ} variables provide access to packet list objects, 
+containing the sending queue and the retransmission queue, respectively. As 
+long as any of these queues contains packets, the script is run in an 
+implicit loop. Therefore, no loop over available packets is necessary in the 
+script. Table \ref{tab:skb-attrs} lists the attributes and methods providing 
+information about a packet.
+The \code{SUBFLOWS} variable contains the list of all subflows. In table 
+\ref{tab:subflow-attrs} the attributes of a subflow object are explained.
+All lists can be filtered by invoking the \code{FILTER} method with a 
+condition expression as a parameter, as shown in example listing 
+\ref{lst:rbs-filter-example}.
 
+\todo{...}
 
 % subflow attributes
 \begin{table}
@@ -515,6 +527,8 @@ The \code{Q} and \code{RQ} variables provide access to packet list objects, cont
 
 
 \subsubsection{Socket Kernel Buffers} \label{skb-annotate}
+
+%something about the annotated socket buffers a.k.a. USER field
 As a packet goes through the Linux network stack, it is stored in a socket 
 kernel buffer (SKB)\footnote{for more information, see 
 \url{http://vger.kernel.org/~davem/skb.html}}. When an application sends 
@@ -528,7 +542,6 @@ transport protocol. For the RBS, this data area is extended to store the
 application and read by the scheduler script. The application can use the 
 \code{setsockopt} call to set the field value for the data which is sent with 
 the following \code{write}s.
-%something about the annotated socket buffers a.k.a. USER field ?
 
 
 
@@ -596,16 +609,29 @@ As opposed to older versions, HTTP/2 is based on long-lived TCP connections. The
 
 
 \subsection{Optimizing HTTP}
+
+\todo{...}
+
 (web performance? http2 performance?)
-\cite{klotski2015}
+
+\textcite{klotski2015}
+
 (general article about HTTP/2 as optimization of http)
-\cite{RFC7540_HTTP2}
+
+\textcite{RFC7540_HTTP2}
 
 \subsection{Frames and Frame Types} \label{http2-frame-types}
+
+\todo{wie sehen frames aus und welche typen gibt es -> zusammenfassen aus http/2 spec}
 
 On the wire, HTTP/2 is a framed protocol.
 
 \subsection{Streams and Priorities}
+
+\todo{was sind streams, warum gibt es sie, wie werden sie priorisiert -> zusammenfassen aus http/2 faq}
+
+
+\todo{diagramm : verschönern oder rauswerfen?}
 
 \begin{tikzpicture}[->,>=stealth',shorten >=1pt,auto,node distance=2.8cm,
 	semithick]
@@ -653,7 +679,10 @@ HTTP/2 is better suited to use with Multipath TCP, as many small requests are co
 
 
 \section{Measuring Web Performance}
-\cite{han2015mwebmptcp}
+
+\todo{evtl  merge mit section darüber}
+
+\textcite{han2015mwebmptcp} \todo{ kurze Zusammenfassung }
 
 %	1. PageLoadTime (Zeit bis Load Event)
 %	2. Zeit bis DOMContentLoaded Event
@@ -684,8 +713,6 @@ HTTP/2 is better suited to use with Multipath TCP, as many small requests are co
 
 % research: what kinds of information that one layer has available, could provide an advantage to an other layer
 
-
-
 \textcite{Raisinghani_2004} elaborate the various ways of providing feedback 
 across protocol layers. They say that the ``application layer can communicate 
 to other layers the application’s QoS needs, i.e. the delay tolerance, 
@@ -695,10 +722,12 @@ a potential application field for cross-layer feedback, because ``a wireless
 LAN interface may provide lesser delays and higher throughput as compared to a 
 GPRS interface on the same device. Depending on the application or user needs,
 the network layer could select an appropriate network interface.'' 
-With Multipath TCP, we can do this even in a more fine-grained way, 
+With Multipath TCP, we can do this, at the transport layer, even in a more 
+fine-grained way, changing the priorities of subflows or sending data 
+redundantly over multiple subflows.
 
 
-\textcite{nowlan2012unorderedtcp} \todo{ inhalt kurz zusammenfassen}
+\textcite{nowlan2012unorderedtcp} \todo{ kurze Zusammenfassung}
 
 
 
@@ -813,7 +842,7 @@ popular web pages with regards to the requests which are made by the browser
 to load them. Requests can be categorized by their type, so first, we go 
 through the most common types of requests. 
 
-\subsection{Request Content Types}
+\subsection{Request Content Types} \label{request-content-types}
 
 The \textit{Document} is the main HTML file which is loaded first. It is 
 strictly necessary for the browser to render the page. It is also usually 
@@ -841,7 +870,7 @@ especially if the image size is provided in the Document source. The same is
 true for \textit{Media} like video and audio, as well as most \textit{XHR} 
 requests. 
 
-\subsection{Structure of Popular Web Pages}
+\subsection{Structure of Popular Web Pages} \label{page-structure-findings}
 
 To acquire a general overview of the structure of requests on popular web 
 sites, we took the 50 highest ranked sites from the Alexa top sites 
@@ -855,7 +884,7 @@ in Section \ref{measurement-script}.
 %alexa_news - 50 top news sites (these are the homepages of the news sites)
 %alexa_science 50 top sites form category 'science'
 %news_article - 12 news articles from news sites listed in alexa_news and some german news sites
-
+\todo{explain/refer to figures, summarized findings}
 
 %note that we only measured requests before the onLoad event
 %- usually web sites are finished with the onLoad event
@@ -863,8 +892,8 @@ in Section \ref{measurement-script}.
 %- 
 \begin{figure}
 	\includegraphics[width=0.9\textwidth]{wps-stackedSizeByCategory2.pdf}
-	\caption{Transferred Data For Loading Web Pages, Grouped By Page Category, 
-	Content Type And Relevance For DOM }
+	\caption{Transferred data for loading web pages, grouped by page category, 
+	content type and relevance for DOM }
 \end{figure}
 
 \begin{figure}
@@ -884,6 +913,8 @@ in Section \ref{measurement-script}.
 \end{figure}
 
 
+
+\clearpage
 
 
 \section{Interaction between Transport and Application Layer} \label{approach-interaction}
@@ -932,38 +963,47 @@ We consider several optimization approaches based on our analysis of web page st
 
 \subsection{Switching the Scheduler Based on Content Type or Priority}
 
-Many modern web pages consist of dozens of resources. They can be classified by their technical priority for rendering the page. 
+Many modern web pages consist of dozens of resources. They can be classified 
+by their technical priority for rendering the page. We described the resource 
+content types in section \ref{request-content-types}. 
+Modern browsers and speed-optimized web pages make sure that the resources 
+with the highest technical priority are requested first. The HTTP/2 server 
+can also facilitate this by pushing out high-priority resources with HTTP Push.
 
-The \textit{Document} is the main HTML file which is loaded first. It is strictly necessary for the browser to render the page. It is also usually required for loading subsequent resources, because it contains their addresses. This requirement can be avoided by using the HTTP/2 push feature, but this has other drawbacks. 
+We can also look at the subjective utility as perceived by the user: In the 
+case of text heavy pages, like on news sites, the Document and some images 
+are most useful to the user as that contains the content of the page. In 
+these cases, the JavaScript resources are often providing tracking and 
+advertising. They are very important for the web site operator but not useful 
+(even annoying) for the user. Especially tracking scripts can be delivered 
+with lower priority as they are invisible and not time critical. On the other 
+hand, for single page web applications and other interactive pages all the 
+relevant content is loaded by JavaScript. Therefore, JavaScript resources 
+have a high user utility here.
 
-Synchronous JavaScript resources (\code{<script>} tags) are required by the browser to construct the Document Object Model (DOM) tree. They must be loaded as soon as the tag is parsed by the browser.
-
-Style sheets are needed for the first layout cycle of the page, which means usually that nothing is displayed to the user until they are fully loaded. If they are loaded too slowly, an the bare page without style sheets applied will be displayed, leaving a bad user experience.
-
-Images can be loaded after the base frame of the site is visible, especially if the image size is provided in the Document source. The same is true for video, audio and most AJAX requests. 
-
-We can also look at the subjective utility as perceived by the user.
-
-In the case of text heavy pages, like on news sites, the Document and some images are most useful to the user as that contains the content of the page. In these cases, the JavaScript resources are often providing tracking and advertising. They are very important for the web site operator but not useful (even annoying) for the user. Especially tracking scripts can be delivered with lower priority as they are invisible and not time critical.
-
-For single page web applications and other interactive pages all the relevant content is loaded by JavaScript. Therefore, JavaScript resources have a high user utility here.
-
-Modern browsers and speed-optimized web pages make sure that the resources with the highest technical priority are requested first. The HTTP/2 server can also facilitate this by pushing out high-priority resources with HTTP Push.
-
-We can therefore try to single out resources with low technical priority and low subjective utility. By giving this as a hint to the scheduler, these might be transmitted only on a cheaper but slower subflow. On the other hand, the higher prioritized contents could be transmitted redundantly in case of a lossy connection.
-
-The resources with high technical priority, especially if required for the first layout cycle, will be handled by a scheduler with emphasis on low latency. %
+Therefore, we can try to single out resources with low technical priority and 
+low subjective utility. By giving this as a hint to the scheduler, these 
+might be transmitted only on a cheaper but slower subflow. On the other hand, 
+the higher prioritized contents could be transmitted redundantly in case of a 
+lossy connection.
+The resources with high technical priority, especially if required for the 
+first layout cycle, will be handled by a scheduler with emphasis on low 
+latency. 
+%
 %latency critical stuff -> redundant if lossy
-In case of a lossy connection, this could be a scheduler transmitting packets redundantly on all subflows, thereby minimizing delays caused by packet loss.
+In case of a lossy connection, this could be a scheduler transmitting packets 
+redundantly on all subflows, thereby minimizing delays caused by packet loss.
 %latency critical stuff -> send on backup if backup has lower rtt
 %\todo{...or send on low-rtt despite IS\_BACKUP}
 %-> combine by checking for loss+rtt
+After these high priority resources are sent out, a more bandwidth conserving 
+scheduler can be used. For example, if one subflow has a higher cost than the 
+other, we could prevent lower priority resources from being sent over this 
+expensive path.
 
-After these high priority resources are sent out, a more bandwidth conserving scheduler can be used. For example, if one subflow has a higher cost than the other, we could prevent lower priority resources from being sent over this expensive path.
 
 
-
-\subsection{Aggressive Transmission of Last Segments}
+\subsection{Aggressive Transmission of Last Segments} \label{optimization-aggres-last-seg}
 The transmitting application signals the state of its outgoing buffers to the scheduler. An interesting condition occurs when the HTTP server has no more data to send, and only a few segments are left in the scheduler's queue. This means only these few segments are missing so that a complete web page can be rendered for the user. The scheduler can try to push out the missing segments more aggressively: By temporarily ignoring the available congestion window for the left over bytes, or by retransmitting on all available subflows.
 
 
@@ -1068,7 +1108,7 @@ network socket, or when a timeout is reached.
 
 \begin{figure}
 	\includegraphics[width=1\textwidth]{http2-awb-layers.pdf}
-	\caption{The annotated data's path through the application layer}
+	\caption{The annotated data's path through the Nghttpd web server}
 	\label{fig:annotated-data-path}
 \end{figure}
 
@@ -1188,9 +1228,7 @@ HTTP/2 frame, which would be inefficient. If \code{wb_} is empty,
 process with a FIFO implemented as a linked list as declared in listing 
 \ref{lst:nghttpd-linkedlist-headers}. The FIFO stores metadata about the 
 octets enqueued in \code{wb_}, along with the number of octets this metadata 
-is valid for. \code{fill_wb} enqueues and \code{write_tls} dequeues the 
-metadata in lockstep with the data. In listing \ref{lst:nghttpd-fill_wb} the 
-code for enqueueing the meta information is highlighted.
+is valid for. 
 
 \begin{lstlisting}[style=C_Code,label=lst:nghttpd-linkedlist-headers,caption={
 Declaration of the data structure for metadata storage (from \code{mptcp_rbs.h})}]
@@ -1204,6 +1242,14 @@ unsigned int skb_prop_peek(struct skb_prop_range **list);
 void skb_prop_pop(struct skb_prop_range **list, unsigned int bytes);
 void skb_prop_push(struct skb_prop_range **list, unsigned int bytes, unsigned int skbProp);
 \end{lstlisting}
+
+\code{fill_wb} enqueues and \code{write_tls} dequeues the 
+metadata in lockstep with the data. In listing \ref{lst:nghttpd-fill_wb} the 
+code for enqueueing the meta information is highlighted. There is a second
+function where data and metadata are enqueued, which is the 
+\code{send_data_callback}. It is used as a performance optimization to avoid 
+unnecessary data copy in memory. For our purposes, it can be viewed as
+identical to \code{fill_wb}.
 
 
 \begin{lstlisting}[style=C_Code,label=lst:nghttpd-fill_wb,caption={
@@ -1283,10 +1329,23 @@ Relaying metadata (from \code{HttpServer.cc}, method \code{Http2Handler::write_t
       wb_.drain(rv);
 \end{lstlisting}
 
+Another information we provide to the RBS scheduler is whether we have more
+data in our internal buffers. This can be used for optimizations as described 
+in Section \ref{optimization-aggres-last-seg}. In Nghttpd, data can be buffered
+in the outgoing item queue of Libnghttp, and in the octet write buffer \code{wb_}
+of the Http2Handler class. We set the register \textbf{R1} to \texttt{1} if both
+queues are empty, and to \texttt{0} otherwise.
+
+\begin{lstlisting}[style=C_Code,label=lst:nghttpd-write_tls-bufferstate,caption={
+Informing RBS about our buffer state (from \code{HttpServer.cc}, method 
+\code{Http2Handler::write_tls})}]
+set_rbs_register(1,  // register R1
+				 (skbProp == NULL && nghttp2_session_want_write(session_) == 0) ? 1 : 0);
+\end{lstlisting}
 
 
 
-\subsection{TLS}
+\subsection{Application Layer Protocol Negotiation}
 
 % newer openssl version (apls support)
 HTTP/2 can be used over the same TCP port as older versions, so browser and 
@@ -1294,13 +1353,19 @@ server need to negotiate the version. When using HTTP/2 over TLS, as is the
 only way to use in current browsers, this negotiation is done during the TLS 
 handshake. Two different protocol extensions to TLS have been defined for 
 this purpose. The older one, Next Protocol Negotiation (NPN) was defined in 
-2012 for the SPDY protocol, a precursor of HTTP/2. It is replaced by 
-Application Layer Protocol Negotiation, defined in 2014 by RFC 7301. The two 
-protocols are very similar, but modern versions of Chrome and Firefox only 
-support APLN, while OpenSSL version 1.0.1, which is available in Debian and 
-Ubuntu repositories only supports NPN. Therefore, we built a more recent 
+2012 for the SPDY protocol, a precursor of HTTP/2. It is replaced by the more
+recent Application Layer Protocol Negotiation, defined as an official
+TLS extension in 2014 \cite{RFC7301}. The two 
+protocols are very similar, the only difference is that with NPN the negotiation
+was encrypted, while APLN adapted to the common TLS practice of conducting
+negotiations in the clear.
+In any case, we need to use APLN, as that is what modern versions of Chrome 
+and Firefox require, while OpenSSL version 1.0.1, which is available in Debian 
+and Ubuntu repositories only supports NPN. Therefore, we built a more recent 
 OpenSSL version and used Nghttpd with it.
 
+
+\subsection{TLS Record Size}
 
 % changing the maximum ssl record size
 As explained in Section \ref{tls-background}, we were concerned with TLS 
@@ -1324,55 +1389,162 @@ method \code{Http2Handler::write_tls})}]
 
 \section{Combining Nghttpd and RBS Schedulers} \label{nghttpd-query-params}
 
-\paragraph{Command Line Arguments}
+Our extended version of Nghttpd supports additional command line arguments 
+and query string parameters to make use of Rule-Based Scheduler features. 
 
-\texttt{-{}-mptcp-ruleset}
+\subsection{Command Line Arguments}
 
-\texttt{-{}-mptcp-skb-prop}
+Multiple scheduler scripts can be loaded in the RBS at the same time. To select 
+which one to use for HTTP/2 connections, the argument \texttt{-{}-mptcp-ruleset=\textit{<name>}}
+must be supplied. Its value should be the name of a loaded scheduler as listed 
+in \code{/proc/net/mptcp_net/rbs/schedulers}.
 
-\paragraph{URL Query Parameters}
+Consistent with the scheduler, we need to configure which kind of metadata 
+Nghttpd will supply. Valid metadata indizes for the 
+\texttt{-{}-mptcp-skb-prop=\textit{<index>}} argument are shown in listing 
+\ref{rbs-prop-indizes}.
 
-\code{rbs_content_type}
+\begin{lstlisting}[style=C_Code,label=rbs-prop-indizes,caption={
+Constants defining valid metadata indizes (from \code{mptcp_rbs.h})}]
+#define RBS_PROP_COUNTER       0    /* counter incremented at every HTTP/2 frame (part) */
+#define RBS_PROP_FRAMETYPE     1    /* frame type as defined in HTTP/2 standard */
+#define RBS_PROP_STREAMID      2    /* stream identifier (unique per connection), mod 255 */
+#define RBS_PROP_CONTENTTYPE   3    /* simplified content type as defined in SKB_CONTENT_* constants */
+\end{lstlisting}
 
-\texttt{rbs\_set\_R\textit{<n>}}
+\subsection{URL Query Parameters}
+
+The scheduler hints can be augmented by the following parameters in the URL 
+query string (``GET parameters''). The code parsing these parameters can be 
+found in Annex B.
+In downloaded web sites, the content types often can't be determined by the 
+file extension. Therefore, the \code{rbs_content_type} parameter can override 
+the content type which is used as a scheduler hint. Valid types can be found 
+in listing \ref{lst:scheduling-content-type-decl}.
+For testing purposes it proved useful to be able to set the internal 
+registers of the RBS script via the \texttt{rbs\_set\_R\textit{<n>}} 
+parameter. The register number and values depend on the individual scheduler 
+script. Register R1 can't be assigned with this parameter as it is used for 
+the buffer state information (c.f. listing \ref{lst:nghttpd-write_tls-bufferstate}).
 
 
-%we use the <packet>.USER property and/or registers R1..6 set by the application code
-%to choose the best possible scheduling preferences/modify the scheduling algorithm
 
+\subsection{Scheduler Registers and USER Field}
 
-\paragraph{Scheduler Registers and USER Field}
+We can use the \code{<packet>.USER} property and registers R1..6 as set by 
+the application code to select the scheduling algorithm or optimize 
+scheduling preferences. With the following explanation and listings, we 
+document and provide examples how the scheduling hints can be used in the RBS 
+script.
 
+As the USER field is a numeric value, we need to settle on a mapping between 
+content types and numbers understood by application and transport layer. All 
+content-aware scheduler scripts contain this mapping as the block of 
+definitions in listing \ref{lst:scheduling-content-type-decl}.
 
 \begin{lstlisting}[style=RBS,label=lst:scheduling-content-type-decl,caption={
-Possible values of the USER field if simplified content types are used as hints.}]
-VAR SKB_CONTENT_NOSTREAM =  1;
-VAR SKB_CONTENT_DOCUMENT =  2;
-VAR SKB_CONTENT_SCRIPT   =  3;
-VAR SKB_CONTENT_STYLE    =  4;
-VAR SKB_CONTENT_IMAGE    =  5;
-VAR SKB_CONTENT_OTHER    =  6;
+Possible values of the USER field if simplified content types are used as hints}]
+VAR SKB_CONTENT_NOSTREAM =  1;   /* data is not part of a stream */
+VAR SKB_CONTENT_DOCUMENT =  2;   /* .html .htm */
+VAR SKB_CONTENT_SCRIPT   =  3;   /* .js */
+VAR SKB_CONTENT_STYLE    =  4;   /* .css */
+VAR SKB_CONTENT_IMAGE    =  5;   /* .jpg .png .gif */
+VAR SKB_CONTENT_OTHER    =  6;   /* all other filetypes */
 \end{lstlisting}
 
 
 
+To test the implementation of content-type specific scheduling, we can mark a 
+fast subflow as \textit{backup}, which usually means 'not to be used as long 
+as other subflows are available'. We then provide the scheduler in listing 
+\ref{lst:ctype-based-subflow-filter}, which won't transfer any images on the 
+backup subflow, but will still consider it for other content types.
+
+\begin{lstlisting}[style=RBS,label=lst:ctype-based-subflow-filter,caption={
+Filtering usable subflows based on content type from USER field}]
+/* next SKB is marked as image content? */
+IF (Q.TOP.USER == SKB_CONTENT_IMAGE) {
+    /* the subflows marked as "BACKUP" are filtered out */
+    usableSbfs.FILTER(sbf => !sbf.IS_BACKUP).MIN(sbf => sbf.RTT).PUSH(Q.POP());
+} ELSE {
+    /* all available subflows are used */
+    usableSbfs.MIN(sbf => sbf.RTT).PUSH(Q.POP());
+}
+\end{lstlisting}
+
+Another way to use content type information, especially in network situations 
+with high packet loss, is to send latency-critical data redundantly. 
+We should consider all data not belonging to a stream as critical, because it 
+is the TLS handshake and a few HTTP/2 settings frames at the start of the 
+connection. In the example listing \ref{lst:ctype-based-redundancy} we also 
+consider the document as critical, because it contains the text contents of 
+the page as well as references to all other elements, whereas we don't add 
+scripts here, because they are often a large percentage of overall page size 
+(c.f. Analysis of page structure in Section \ref{page-structure-findings}). A 
+better approach could be to consider scripts only critical if required for 
+the First Contentful Paint of the page.
+
+\begin{lstlisting}[style=RBS,label=lst:ctype-based-redundancy,caption={
+Sending packets redundantly based on the content type from USER field}]
+/* next SKB is document or non-stream data? */
+IF (Q.TOP.USER <= SKB_CONTENT_DOCUMENT) {
+    /* critical packet, send redundantly */
+    FOREACH(VAR sbf IN usableSbfs) {
+        sbf.PUSH(Q.TOP);
+    }
+    DROP(Q.POP());
+} ELSE {
+    /* otherwise, send it only on fastest subflow */
+    usableSbfs.MIN(sbf => sbf.RTT).PUSH(Q.POP());
+}
+\end{lstlisting}
+
+As we are informed about the queue levels of the application over the R1 
+register, we can use this information for scheduling decisions as well.
+For example, when our own \code{Q} sending queue is empty, and we know that 
+no new data will come from the application soon, we can decide to retransmit 
+unacknowledged packets on all subflows they haven't been sent on. This could 
+speed up the ``tail'' of a connection, i.e. the last missing packets for 
+displaying a web page. 
+
+\begin{lstlisting}[style=RBS,label=lst:ctype-based-redundancy,caption={
+Retransmitting unacknowledged packets if send queues are empty}]
+VAR applicationQueuesEmpty = R1;
+IF (Q.EMPTY && applicationQueuesEmpty == 1) {
+    VAR usableSbfs = SUBFLOWS.FILTER(sbf => sbf.CWND > sbf.SKBS_IN_FLIGHT);
+    
+    /* resend the oldest packet which wasn't sent on all usable subflows yet */
+    VAR oldestPacket = QU.
+        FILTER(packet => 
+            !usableSbfs.FILTER(sbf => ! packet.SENT_ON(sbf)).EMPTY
+        ).TOP;
+	
+	/* retransmit only on subflows it has not yet been sent on */
+    VAR newSbfs = usableSbfs.FILTER(sbf => !oldestPacket.SENT_ON(sbf));
+	FOREACH(VAR sbf IN newSbfs) {
+		sbf.PUSH(oldestPacket);
+	}
+}
+\end{lstlisting}
 
 %We use three timing metrics, which are available over the Chrome debugging protocol\footnote{\url{https://developer.chrome.com/devtools/docs/debugger-protocol}}, the protocol of the Google Chrome web browser's developer tools.
 
+\clearpage
 \section{Instrumenting the Web Browser} \label{measurement-script}
 
-\begin{figure}
-	\includegraphics[width=0.8\textwidth, trim=0.25in 0.25in 0.25in 0.25in, clip]{chrome-tracing.pdf}
-	\caption{A sample interaction with the Chrome Tracing API}
+\begin{wrapfigure}{r}{0.6\textwidth}
+	\includegraphics[width=0.6\textwidth, trim=0.25in 4.15in 4.15in 0.25in, clip]{chrome-tracing.pdf}
+	\caption{A sample interaction with the Chrome Debugging API}
 	\label{fig:chrome-tracing-api}
-\end{figure}
+\end{wrapfigure}
+
 
 In our analysis of web page structure, as well as in the later evaluations of 
 collaborative schedulers, we use several metrics as described in Section 
 \ref{metrics-web-perf}. These are visible in the Google Chrome web browser's 
 developer tools, and are available via the Chrome Debugging Protocol\footnote{%
 \url{https://developer.chrome.com/devtools/docs/debugger-protocol}}. 
-We use this protocol from a Python script, \code{measure_web_requests.py}, to 
+We use this protocol from a Python script, \code{measure_web_requests.py} (reproduced in Annex A), to 
 instrument the web browser to navigate to pages we want to measure, and to 
 retrieve the network and tracing data.
 
@@ -1382,6 +1554,7 @@ Chrome instance with special parameters to prevent interference: we disable
 automatic updates, the popup blocker, welcome message, Google Translate, and 
 others. We also specify a new profile directory, to prevent distortion from 
 cached data from previous experiments. 
+
 After connecting over the Chrome Debugging Protocol, it enables \textit{Page} 
 and \textit{Network} related events and starts a new tracing session. Because 
 the tracing API uses its own timestamps, we need to synchronize it with wall 
@@ -1393,8 +1566,14 @@ an internal buffer. The network component sends us events of every resource
 load in real time. We accumulate the number of requests and the response sizes, 
 grouped by origin (domain name and port) and by content type.
 
-As a result, the script prints a report as shown in Listing 
-\ref{lst:measure-web-requests-output}. In this example, the English homepage of 
+As a result, the script prints a report with tables of the tracing event timings
+and request numbers and sizes.
+A condensed version of the output is appended to a logfile in CSV format. The 
+full results are also written to a machine-readable JSON file, which is then 
+used by an aggregation script in the scheduler evaluation framework.
+
+In the example report shown in Listing 
+\ref{lst:measure-web-requests-output}, the English homepage of 
 Wikipedia was loaded, which took 0.8 seconds in total. 310 kilobytes of data 
 were transmitted from three different origins. 
 In the second and third table, the column \texttt{\#req} shows the number of 
@@ -1406,6 +1585,7 @@ allows us to see that document and stylesheets were fully loaded before the
 \textit{DOMDocumentLoaded} event, whereas most images loaded afterwards. 
 
 
+\clearpage
 \begin{lstlisting}[label=lst:measure-web-requests-output,caption={
    A report generated by \code{measure_web_requests.py}
 },keywords={},numbers=left,tabsize=8,escapeinside={(*}{*)}]
@@ -1441,11 +1621,6 @@ before Load: 310k
   30	   93.55k	    5.05k	Image
    5	  181.82k	   23.83k	Script
 \end{lstlisting}
-
-A condensed version of the output is appended to a logfile in CSV format. The 
-full results are also written to a machine-readable JSON file, which is then 
-used by an aggregation script in the scheduler evaluation framework.
-
 
 %=====================================================================
 \chapter{Evaluation}
@@ -1500,6 +1675,7 @@ Measuring the page load times of real-world web pages (mirrored on special web s
 
 - Sites which are often used on mobile
 
+\todo{stichworte -> text}
 
 
 \section{Preparation of Real-World Web Pages}
@@ -1704,6 +1880,7 @@ IF (!Q.EMPTY) {
 }
 \end{lstlisting}
 
+\todo{description and interpretation of results}
 
 \begin{figure}
 \centering
@@ -1714,14 +1891,14 @@ IF (!Q.EMPTY) {
 
 \begin{figure}
 \centering
-	\includegraphics[width=0.45\textwidth]{eva1-rxbytes.png}
+	\includegraphics[width=0.8\textwidth]{eva1-rxbytes.pdf}
 	\caption{Received bytes per interface for Evaluation A }
 	\label{eva1-rxbytes}
 \end{figure}
 
 \begin{figure}
 \centering
-	\includegraphics[width=0.9\textwidth]{eva1-loadtimes.png}
+	\includegraphics[width=1\textwidth]{eva1-loadtimes.pdf}
 	\caption{Page load times for Evaluation A }
 	\label{eva1-loadtimes}
 \end{figure}
@@ -1751,9 +1928,16 @@ IF (!Q.EMPTY) {
 % oder images only one sbf
 
 
-\subsection{Evaluation B (``Lossy'') (TODO!)}
-\todo{TODO}
+\subsection{Evaluation B (``Both lossy'') (TODO!)}
 
+We build an optimized scheduler for situations where multiple lossy network 
+connections are available.
+When the packet loss raises above a defined threshold, we start sending data 
+redundantly. To conserve bandwidth, we only do redundant transmissions for 
+latency critical data. The application provides scheduling hints whether the 
+data is latency critical or not.
+
+\todo{TODO}
 
 %maybe redundant for ``important'' stuff?
 % ...combination, switch dependent on RTT and LOSS -- maybe do this in a separate Eval C
@@ -1776,7 +1960,7 @@ IF (!Q.EMPTY) {
 \chapter{Conclusion}
 %=====================================================================
 
-
+\todo{conclusion}
 
 \section{Outlook / Future Work}
 
@@ -1784,6 +1968,7 @@ IF (!Q.EMPTY) {
 %client side
 
 The client (web browser) side of optimizations was mostly excluded from our considerations. 
+\todo{...}
 % one might implement a mptcp protocol extension so the logic can sit mostly in browser OR webserver, and the other side is instructed what to do
 % another way to generalize this could be definining a way for the web page/app to give the hints to the browser, which passes them on to the client mptcp scheduler
 % -> the server scheduler implementation could send the corresponding mptcp frames with the same scheduling strategy as the request
@@ -1795,6 +1980,7 @@ The client (web browser) side of optimizations was mostly excluded from our cons
 %more interfaces
 
 % ***Extension to three or more interfaces
+\todo{Extension to three or more interfaces}
 
 %-------------------------------------------------------
 %automated web site analysis
@@ -1803,6 +1989,7 @@ The client (web browser) side of optimizations was mostly excluded from our cons
 Some optimizations rely on manually providing resource priorities and dependencies to the web server. Our work could be combined with automated algorithms to determine dependency graphs of web pages and user relevancy ratings of resources. Butkiewicz et al. \cite{klotski2015}
 
 % - automated categorization of ressources/http requests
+\todo{...}
 
 % - automated dependency graph
 
@@ -1811,12 +1998,12 @@ Some optimizations rely on manually providing resource priorities and dependenci
 
 %Automatisches Aufbauen von Dependency Graphs
 
-
+^^
 %-------------------------------------------------------
 %real web server
 
 % ***Porting to a ``real'' web server e.g. apache or nginx
-
+\todo{Porting to a ``real'' web server e.g. apache or nginx}
 
 
 
