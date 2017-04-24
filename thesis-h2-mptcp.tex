@@ -184,12 +184,12 @@
 \begin{abstract}
 %=====================================================================
 
-Multipath TCP is an extension to the Transmission Control Protocol (TCP) to support the use of multiple paths between hosts with multiple interfaces. An implementation of Multipath TCP has to decide for each data segment over which path it should be sent. This decision can be based on different criteria and algorithms, making a trade-off between throughput, resource utilization, reliability and latency. Multipath TCP is backwards compatible to TCP, not only on the wire, but also towards the application layer. With the current reference implementations, applications do not have to be aware of Multipath TCP, but they also can't influence the scheduling decisions.
+Multipath TCP is an extension to the Transmission Control Protocol (TCP) to support the use of multiple paths between hosts with multiple interfaces. It is backwards compatible to TCP, not only on the wire, but also towards the application layer. With the current reference implementation, applications do not have to be aware of Multipath TCP, but also can't influence the scheduling decisions. An implementation of Multipath TCP has to decide for each data segment over which path it should be sent. This decision can be based on different criteria and algorithms, making a trade-off between throughput, resource utilization, reliability and latency.
  %\cite{RFC6182}
 
 We show that hints from the application can improve scheduling performance. We enable the application to select and modify the scheduling algorithm based on its internal information about content types, priorities, dependencies and user expectations.
-For this, we modify an HTTP/2 web server to pass scheduling hints to the Multipath TCP scheduler via socket options. The scheduling algorithms are developed in the RBS scripting language for easier evaluation.
-An evaluation is performed in simulated and real-world environments over LTE and WiFi.
+For this purpose, we modify an HTTP/2 web server to pass scheduling hints to the Multipath TCP scheduler via socket options. The scheduling algorithms are developed in the RBS scripting language for easier evaluation.
+An evaluation is performed in simulated and real-world environments over LTE and WiFi, demonstrating that better trade-offs between (perceived) speed and network load can be achieved by utilizing the additional information.
 
 
 \end{abstract}
@@ -205,9 +205,7 @@ An evaluation is performed in simulated and real-world environments over LTE and
 \tableofcontents
 
 \listoffigures
-
 \listoftables
-
 \lstlistoflistings
 
 
@@ -1362,7 +1360,8 @@ negotiations in the clear.
 In any case, we need to use APLN, as that is what modern versions of Chrome 
 and Firefox require, while OpenSSL version 1.0.1, which is available in Debian 
 and Ubuntu repositories only supports NPN. Therefore, we built a more recent 
-OpenSSL version and used Nghttpd with it.
+OpenSSL version from source and changed the Nghttpd build configuration to use 
+it.
 
 
 \subsection{TLS Record Size}
@@ -1540,7 +1539,7 @@ IF (Q.EMPTY && applicationQueuesEmpty == 1) {
 
 
 In our analysis of web page structure, as well as in the later evaluations of 
-collaborative schedulers, we use several metrics as described in Section 
+collaborative schedulers, we use the timing metrics described in Section 
 \ref{metrics-web-perf}. These are visible in the Google Chrome web browser's 
 developer tools, and are available via the Chrome Debugging Protocol\footnote{%
 \url{https://developer.chrome.com/devtools/docs/debugger-protocol}}. 
@@ -1696,14 +1695,21 @@ There are sites which we can test unmodified, but where we should change things 
 \subsection{Handling Dynamic and Third Party Requests}
 
 As we found in Section \ref{approach-web-analysis}, most modern web sites request resources from third-party hosts, and refer to resources which are generated dynamically by the server, possibly changing with every request.
-We have to handle these cases in our evaluation. 
-
+We have to handle these cases in our evaluation. Possible strategies for 
+handling third-party resources are loading them unmodified from the original 
+server, not loading them at all, using a proxy or storing them locally while 
+patching the web page to load them from our server.
+ 
+The proxy approach, which caches all requests for a page load, and replays 
+them for later evaluations, has been implemented for HTTP/1.1 by the Chromium 
+team in web-page-replay\footnote{\url{https://github.com/chromium/web-page-replay}}. 
+We considered implementing an explicit or transparent HTTP/2 proxy 
+as too complex and not necessary for our evaluations.
 %Downloading web pages with browser/wget and delivering with nghttpd - Problem: how to handle dynamic or third-party requests?
 
-
-In these simulations, we chose to keep most third party requests as-is, loading the resource from the original server, especially advertisements, tracking snippets and complex libraries from Content Delivery Networks (CDNs). This has the advantage of providing more realistic results than rejecting all third-party requests at the browser or firewall level. 
-Another possible approach would have been to implement an explicit or transparent HTTP/2 proxy, which caches all requests for a page load, and replays them for later evaluations. This has been implemented for HTTP/1.1 by the Chromium team in web-page-replay\footnote{\url{https://github.com/chromium/web-page-replay}}. 
-Simple JavaScript libraries (consisting of single files) were downloaded and served locally, and we modifying the web page to fetch them from the local server. This is a simple optimization which is realistic to be made by real website operators.
+This resulted in a mixture of above mentioned strategies:
+In simulations on real networks, we chose to keep most third party requests as-is, loading the resource from the original server, especially advertisements, tracking snippets and complex libraries from Content Delivery Networks (CDNs). This is quite realistic, because most of these requests will stay third-party, even if website owners decide to optimize for HTTP/2.
+Our virtual networks were completely separated from the internet, therefore all third-party requests were rejected at the network level. However, we downloaded simple JavaScript libraries (consisting of single files) and served them locally, modifying the web page to fetch them from the local server. This is a simple optimization which is realistic to be made by website operators, and allowed us to keep the simulation simple. 
 
 % Cancel/reject all third party requests (in-browser / iptables)
 %	Pro: Easy, reproducible
@@ -1818,11 +1824,38 @@ To confirm the measurements we conducted in Mininet, we ran the same software on
 % zeigen - implementiertung funktioniert grundsätzlich
 % simple (``academic'') content-type specific scheduling
 
-The goal of this evaluation is to test the implementation of content-type specific scheduling, and to show a first content-type based optimization of a synthetic web page. The network situation is shown in Figure \ref{eva1-scenario}. A user with a smart phone is connected to a free Wi-Fi hotspot, which routes the traffic through a VPN and therefore incurs a high latency, and is also connected to a cellular network with low latency but metered traffic limits. The user loads a web page which is modelled after a typical news article, it consists of an HTML document referencing style sheet, script and images of different size. All styles and scripts are included in the \code{<head>} of the document and required for rendering the page. Two big images are included below the fold and are not required for the rendering.
+\begin{figure}
+\centering
+	\includegraphics[width=0.9\textwidth]{eva1-scenario.pdf}
+	\caption{Network scenario which is simulated in Evaluation A }
+	\label{eva1-scenario}
+\end{figure}
 
-The scenario is emulated in Mininet. Client and Server are modelled as Mininet hosts running the Google Chrome browser and the nghttpd web server, respectively. They each have two interfaces, which are connected by two Mininet links with delay and rate limiting to simulate the two connection paths. 
+The goal of this evaluation is to test the implementation of content-type 
+specific scheduling, and to show a first content-type based optimization of 
+existing and modified web pages. The network situation is shown in Figure \ref
+{eva1-scenario}. A user surfs the web on a smart phone which is connected to 
+a free Wi-Fi hotspot and a cellular network. The Wi-Fi routes the traffic 
+through a VPN and therefore incurs a high latency, but has acceptable 
+bandwidth and no traffic limit. In contrast, the cellular network has low 
+latency but a metered traffic limit and is therefore considered as ``
+expensive''.
+The scenario is emulated in Mininet. Client and server are modelled as 
+Mininet hosts running the Google Chrome browser and the Nghttpd web server, 
+respectively. They each have two interfaces, which are connected by two 
+Mininet links with delay and rate limiting to simulate the two connection 
+paths. 
 
-A scheduler script was designed to send the images only over the ``cheap'' Wi-Fi subflow, and allow the other, more time-critical data, to choose from the available subflows the one with the lowest round-trip time.
+The web pages we used are an unmodified article from CNN, and the original 
+and a modified version of the English wikipedia home page. They consist of an 
+HTML document referencing style sheet, script and images of different size. 
+On the Wikipedia page, all styles and scripts are included in the \code{<head>
+} of the document and required for rendering the page. In the modified 
+version, we included two big images below the fold that are not required for 
+the rendering.
+
+A scheduler script was designed to send the images only over the ``cheap'' Wi- Fi subflow, and allow the other, more time-critical data, to choose from the available subflows the one with the lowest round-trip time.
+
 
 
 %story:
@@ -1882,12 +1915,17 @@ IF (!Q.EMPTY) {
 
 \todo{description and interpretation of results}
 
-\begin{figure}
-\centering
-	\includegraphics[width=0.9\textwidth]{eva1-scenario.pdf}
-	\caption{Network scenario which is simulated in Evaluation A }
-	\label{eva1-scenario}
-\end{figure}
+For comparison we use two reference schedulers, one that only transmits on 
+the non-backup subflow, which is comparable to single path TCP, and one that 
+ignores the backup flag and always uses the fastest available subflow.
+
+We run the simulation multiple times for every combination of scheduler, 
+network and web page and look at the averaged received bytes per interface, 
+as well as the browser timings. The results show that with the content-aware 
+scheduler we have the same time to first meaningful paint as the reference 
+scheduler for both the original and modified Wikipedia homepage, while saving 
+60 kB and 1.3 MB of data volume, respectively, on the cellular connection. 
+For the CNN artice
 
 \begin{figure}
 \centering
