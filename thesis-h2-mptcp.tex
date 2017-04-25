@@ -42,6 +42,9 @@
 \usepackage{listings}
 \usepackage{lstlinebgrd}
 
+\usepackage[toc,page]{appendix}
+
+
 %--------------------------------------------------------
 % configuration
 %--------------------------------------------------------
@@ -213,7 +216,7 @@ An evaluation is performed in simulated and real-world environments over LTE and
 \chapter{Introduction}
 %=====================================================================
 
-In the following paragraphs, we describe the motivation for the relatively recent protocols this work is based on as well as for the kind of optimizations that will be implemented in this thesis. We introduce the approach and give an overview of the remaining chapters.
+In the following paragraphs, we describe the motivation for the recently updated protocols this work is based on as well as for the kind of optimizations that will be implemented in this thesis. We introduce the approach and give an overview of the remaining chapters.
 
 
 
@@ -293,7 +296,7 @@ We start by analyzing the general structure of popular web sites regarding the r
 From the gained insights, we conceive possible optimizations for existing, modified or specially crafted web pages at the transport level. The Multipath TCP implementation \cite{multipathtcp} consists of three major building blocks: path manager, packet scheduler and connection to the subflows \cite{RFC6182}. In this thesis, we pay special attention to the packet scheduler. More precisely, we concentrate on its component which spreads individual segments over subflows. These optimized schedulers are implemented in rule-based scripts which are loaded into the MPTCP implementation in the Linux kernel. To make scheduling hints like content type, priorities or dependencies available to the scheduler scripts, we modify a suitable HTTP/2-capable web server to pass on these hints as socket options. 
 
 %auch implement. und eval approach
-The next step is an evaluation of the implemented optimizations in simulated network environments. Web sites are loaded in network scenarios differing in bandwidth, round trip time and packet loss. To study the practicality, we conduct real-world measurements for the best-performing optimizations, connecting from LTE and domestic ADSL access networks to virtual servers at a cloud provider. 
+The next step is an evaluation of the implemented optimizations in simulated network environments. Web sites are loaded in network scenarios differing in bandwidth, round-trip time and packet loss. To study the practicality, we conduct real-world measurements for the best-performing optimizations, connecting from LTE and domestic ADSL access networks to virtual servers at a cloud provider. 
 
 
 
@@ -350,15 +353,11 @@ In this chapter, we go through transport, presentation and application layer, th
 \section{Transport Layer: Multipath TCP}
 
 
-\begin{figure}
-	\includegraphics[width=1\textwidth]{mptcp-functional-decomposition.pdf}
-	\caption{Interaction of the functional building blocks of Multipath TCP as described in \cite{RFC6182}}
-\end{figure}
 %
 %http://www.ip-insider.de/anwendungen-und-konkurrenz-fuer-multipath-tcp-a-445245/
 %
 
-Two pipes are better than one - that's Multipath TCP in a nutshell \cite{IpInsiderMptcp}. In this case, a pipe is a distinct path between two devices, identified by the IP adresses of both peers. Combining multiple of these subflows can provide several advantages. Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow stops working, the backup takes over seamlessly. On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows.
+Two pipes are better than one - that's Multipath TCP in a nutshell \cite{IpInsiderMptcp}. In this case, a pipe is a distinct path between two devices, identified by the IP adresses of both peers. Combining multiple of these subflows can provide several advantages: Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow stops working, the backup takes over seamlessly. On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows.
 
 This section covers the background knowledge on Multipath TCP which is required for the remaining work. We start by enumerating the current software implementations of Multipath TCP and giving some information on its current deployment. Following that, we describe the architecture of protocol and implementations. We present studies evaluating and optimizing Multipath TCP performance, and proposals and implementions of interfaces to the application layer. To finish this section, we explain the rule-based scheduler, a Multipath TCP packet scheduler, which makes its decisions based on script programs which are changeable during runtime, allowing us to evaluate different scheduling approaches faster.
 
@@ -367,13 +366,107 @@ This section covers the background knowledge on Multipath TCP which is required 
 
 
 
+
+\subsection{Architecture of Multipath TCP}
+%Following that, we describe the architecture of the Multipath TCP protocol and implementation. 
+
+\textcite{Ford2008} proposed that endpoint addressing and congestion control 
+should be factored out of the Internet transport layer into a separate 
+Endpoint Layer and Flow Layer, respectively, to address ``roadblocks to 
+Internet evolution'' caused by the fact that middleboxes such as ``firewalls 
+and NATs must understand transport headers''.
+In RFC 6182, \textcite{RFC6182} explain that the architectural design of 
+Multipath TCP is based on this idea, decomposing the transport layer 
+functions into application-oriented and network-oriented parts. They describe 
+``the subflow TCP
+component, which provides network compatibility by appearing and
+behaving as a TCP flow in the network [as] an instantiation of the
+`network-oriented' Flow+Endpoint layer''. 
+It is acknowledged that at this layer end-to-end service can't be expected 
+as ``Middleboxes routinely interpose on the transport layer''.
+These compatibility is considered important to allow deploying it in the 
+current Internet landscape.
+
+The ```application-oriented' Semantic layer'' of Multipath TCP provides ``
+application compatibility through the preservation of TCP-like semantics of 
+global ordering of application data and reliability''. Combined with a 
+backward compatible API this allows ``that existing applications can use the 
+newer transport merely by upgrading the operating systems of the end hosts''.
+
+According to \textcite{RFC6182} a Multipath TCP implementation must provide 
+the following features: (a) path management, to find paths and establish new 
+subflows between the peers; (b) packet scheduling, to split the octet stream 
+into segments and decide on which subflow(s) to send each of them, and to 
+reassemble them upon receiving; (c) a subflow interface, to transmit packets 
+over a single path, in a way compatible with TCP; (d) shared congestion 
+control for all subflows of the same connection, to ensure sharing fairly 
+bandwidth at bottlenecks.  
+
+In figure \ref{fig:mptcp-arch}, we illustrate how data flows through the 
+Multipath TCP transport layer components: the application produces a stream 
+of data, the packet scheduler breaks it into segments and distributes them 
+across the subflow interfaces. They, in turn, add per-subflow sequence 
+numbers and transmit the segments over the network layer. At the remote peer, 
+segments flows in the opposite direction, while getting reordered and finally 
+reassembled to an application data stream by the packet scheduler.
+
+\begin{figure}
+	\includegraphics[width=1\textwidth]{mptcp-functional-decomposition.pdf}
+	\caption{Interaction of the functional building blocks of Multipath TCP as described in \cite{RFC6182}}
+	\label{fig:mptcp-arch}
+\end{figure}
+
+%\subsubsection{Path Management}
+
+
+
+%\subsubsection{Packet Scheduling}
+
+
+
+
+%\subsubsection{TCP Subflows}
+
+
+%\todo{xxx}
+
+
+
+\subsection{Multipath TCP on the Wire}
+Multipath TCP subflows look and behave on the wire exactly like regular TCP 
+flows, except the segments contain some additional TCP options as described 
+in RFC 6824 \cite{RFC6824_MPTCP}.
+
+When a new Multipath TCP connection is set up, the \textbf{MP\_CAPABLE} 
+option is included in the SYN segment. From this options, the server learns 
+that the new client supports MPTCP. In the responding SYN-ACK and ACK 
+segments, the MP\_CAPABLE option is included as well, serving as a handshake, 
+in which authentication keys are exchanged. These keys are later used in the 
+process of adding more subflows to the connection.
+
+New subflows are initiated by establishing what looks like a regular TCP 
+connection to the network, but contains the \textbf{MP\_JOIN} option in the 
+three-way handshake segments. The contents of this option depends on the 
+stage of the handshake. The initiator sends an identifying token, which is 
+based on the authentication keys.  In the first two segments, random numbers 
+(nonces) are exchanged. To authenticate each other, the peers exchange HMACs 
+of the concatenated nonces keyed on the concatenated authentication keys in 
+the second and third segment.
+
+During the regular data transmission, the \textbf{DSS} option (Data Sequence 
+Signal) is added to every segment. It contains sequence numbers and 
+acknowledgements, which work very similar to their TCP counterparts. They are 
+necessary to ensure ordered data transfer across subflows, and to retransmit 
+segments in case of collapse of a subflow.
+
+
 \subsection{Implementations and Deployment}
 %We start by enumerating the current software implementations of Multipath TCP and giving some information on its current deployment.
 
 %reference(?) implementation in linux kernel
-The current reference implementation\footnote{\url{http://multipath-tcp.org/}} is based on the Linux kernel and maintained by \textcite{multipathtcp} at the Université Catholique de Louvain. A similar patch for the FreeBSD kernel has been developed at Swinburne University\footnote{\url{http://caia.swin.edu.au/newtcp/mptcp/}}.
+The current reference implementation\footnote{\url{http://multipath-tcp.org/}} is based on the Linux kernel and was developed by \textcite{multipathtcp} at the Université Catholique de Louvain. A similar patch for the FreeBSD kernel has been developed at Swinburne University\footnote{\url{http://caia.swin.edu.au/newtcp/mptcp/}}.
 %https://support.apple.com/en-us/HT201373
- The first implementation of Multipath TCP was developed as a user-space proxy\footnote{\url{https://open-innovation.alcatel-lucent.com/projects/mptcp-proxy}} by Hampel at Bell Labs, and is no longer maintained.  
+The first implementation of Multipath TCP was written as a user-space proxy\footnote{\url{https://open-innovation.alcatel-lucent.com/projects/mptcp-proxy}} by Hampel at Bell Labs, and is no longer maintained.  
 %other implementations
 The most widely deployed implementation is found in Apple's XNU kernel \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the Siri personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
 All aforementioned implementations are open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
@@ -407,37 +500,6 @@ concentrate on consumer devices with Wi-Fi and cellular interfaces.
 \end{table}
 
 
-\subsection{Architecture of Multipath TCP}
-%Following that, we describe the architecture of the Multipath TCP protocol and implementation. 
-
-\todo{Following that, we describe the architecture of the Multipath TCP protocol and implementation. }
-
-
-%\subsubsection{Path Management}
-
-
-
-%\subsubsection{Packet Scheduling}
-
-
-
-
-%\subsubsection{TCP Subflows}
-
-
-\subsection{Multipath TCP on the Wire}
-
-Great care was taken in the specification of Multipath TCP to maintain compatibility with regular TCP, not only but especially towards the network layer. This was done with regard to the deploying it in the current Internet, which means coping with network address translators, firewalls and other middleboxes.
-Therefore, Multipath TCP subflows look and behave on the wire exactly like regular TCP flows, except the segments contain some additional TCP options as described in RFC 6824 \cite{RFC6824_MPTCP}.
-
-When a new Multipath TCP connection is set up, the \textbf{MP\_CAPABLE} option is included in the SYN segment. From this options, the server learns that the new client supports MPTCP. In the responding SYN-ACK and ACK segments, the MP\_CAPABLE option is included as well, serving as a handshake, in which authentication keys are exchanged. These keys are later used in the process of adding more subflows to the connection.
-
-New subflows are initiated by establishing what looks like a regular TCP connection to the network, but contains the \textbf{MP\_JOIN} option in the three-way handshake segments. The contents of this option depends on the stage of the handshake. The initiator sends an identifying token, which is based on the authentication keys.  In the first two segments, random numbers (nonces) are exchanged. To authenticate each other, the peers exchange HMACs of the concatenated nonces keyed on the concatenated authentication keys in the second and third segment.
-
-During the regular data transmission, the \textbf{DSS} option (Data Sequence Signal) is added to every segment. It contains sequence numbers and acknowledgements, which work very similar to their TCP counterparts. They are necessary to ensure ordered data transfer across subflows, and to retransmit segments in case of collapse of a subflow.
-
-
-
 \subsection{Socket API}
 %We present [...] proposals and implementions of interfaces to the application layer.
 
@@ -459,10 +521,41 @@ They also recommend that socket options on a Multipath TCP meta-socket should be
 
 \todo{We present studies evaluating and optimizing Multipath TCP performance, [...]}
 
+%Experimental evaluation of multipath TCP schedulers
+\textcite{Paasch2014} 
 
-\subsection{Optimizing Multipath TCP Scheduling}
+\textcite{Chen2013} evaluate the download times for files of different size 
+using Multipath TCP over Wi-Fi and cellular connections to using only one of 
+those interfaces alone. They found ``that MPTCP is robust in achieving 
+performance at least close to the best single-path performance, across a wide 
+range of network environments. For large transfers, performance is better 
+than the best single path, except in cases with poor cellular networks''. 
+When downloading small files, they found that Multipath TCP provides benefits 
+as it ``leverages [multiple] slow-start phases simultaneously to fetch the 
+one file''.
 
-\todo{merge wth above?}
+They also provide useful data on performance characteristics of Wi-Fi and 
+cellular networks. Mobile 4G connections have specified maximum data rates of 
+100 Mbps. They observed that packet ``loss rates over 3G/4G networks are 
+generally lower than 0.1\%, while those of WiFi vary from 1\% to 3\%''. The 
+low loss rates are bought at the price of higher RTTs, as cellular operators 
+use local retransmission mechanisms to avoid TCP identifying the packet as 
+lost and regarding the link as congested. RTTs are reported as 30 ms on 
+average for Wi-Fi connections, and at least 60 ms for cellular connections.
+ 
+
+%Impact of Path Characteristics and Scheduling Policies on MPTCP Performance
+\textcite{Arzani2014} compare Multipath TCP schedulers that only decide based 
+on the congestion window of subflows to schedulers that are aware of the 
+round-trip time of subflows. They found that only if the RTTs of subflows are 
+substantially different, the RTT-aware scheduler performs better.
+%Remp TCP: Low latency multipath TCP
+\textcite{Frommgen2016a} propose a Multipath TCP scheduling algorithm which 
+sends data redundantly over multiple subflows, to achieve the lowest possible 
+latency at the cost of higher bandwidth usage. They evaluate it for multipath 
+connections over WiFi and LTE, finding that it ``more than halved the average 
+round-trip time''.
+
 
 
 \subsection{Rule-Based Scheduler}
@@ -474,27 +567,31 @@ The rule-based scheduler by \textcite{RBS} is a programmable Multipath TCP sched
 In the later chapters, we show several scheduler scripts written in the RBS language. To allow the reader to follow these scripts, we give an introduction to the core objects used in the scripts.
 The syntax of RBS is similar to JavaScript, with the most obvious difference that keywords are written in upper-case. 
 
-\paragraph{Available Variables}
+\paragraph{Lists}
 The \code{Q} and \code{RQ} variables provide access to packet list objects, 
 containing the sending queue and the retransmission queue, respectively. As 
 long as any of these queues contains packets, the script is run in an 
 implicit loop. Therefore, no loop over available packets is necessary in the 
-script. Table \ref{tab:skb-attrs} lists the attributes and methods providing 
-information about a packet.
+script. As queues, they provide access to the top element through the 
+\code{TOP} attribute and the \code{POP()} method. The \code{QU} list contains 
+all unacknowledged packets. Table \ref{tab:skb-attrs} lists the attributes and 
+methods providing information about a packet.
 The \code{SUBFLOWS} variable contains the list of all subflows. In table 
 \ref{tab:subflow-attrs} the attributes of a subflow object are explained.
-All lists can be filtered by invoking the \code{FILTER} method with a 
-condition expression as a parameter, as shown in example listing 
-\ref{lst:rbs-filter-example}.
-
-\todo{...}
+Lists provide several methods which facilitate a function approach by using 
+an anonymous function as a parameter to filter, sort or aggregate the list: 
+\code{FILTER} returns a list containing all elements for which the expression 
+evaluates to TRUE; \code{MAX} and \code{MIN} return the element for which the 
+expression produces the greatest or smallest value, respectively; and 
+\code{SUM} calculates the sum of the expression evaluated on every list element.
+They also all have \code{COUNT} and \code{EMPTY} attributes available. 
 
 % subflow attributes
 \begin{table}
 	\begin{tabularx}{\linewidth}{ l X } \toprule
 	Attribute & Description \\ \midrule
 	\code{ID}								& Numeric identifier of the subflow. Unique per MPTCP connection. \\
-	\code{RTT} 							& Calculated round trip time on this subflow in milliseconds. \\
+	\code{RTT} 							& Calculated round-trip time on this subflow in milliseconds. \\
 	\code{LOST_SKBS} 				& Number of packets which were lost on this subflow. \\
 	\code{SKBS_IN_FLIGHT} & Number of packets which were sent out on this subflow but not yet acknowledged or retransmitted. \\
 	\code{CWND} 						& Congestion window. Number of packets which are allowed to be in flight on this subflow at the same time. \\
@@ -502,7 +599,7 @@ condition expression as a parameter, as shown in example listing
 	\bottomrule
 	\end{tabularx}
 	\caption{Subflow details as seen from the RBS script}
-	\label{}
+	\label{tab:subflow-attrs}
 \end{table}
 
 
@@ -519,9 +616,30 @@ condition expression as a parameter, as shown in example listing
 	\bottomrule
 	\end{tabularx}
 	\caption{Packet properties}
-	\label{}
+	\label{tab:skb-attrs}
 \end{table}
 
+
+
+\paragraph{Scheduling Packets}
+To actually schedule a packet onto a subflow, the PUSH method of a subflow is 
+called. Listing \ref{lst:schedule-a-packet} shows the idioms for scheduling a 
+packet on one or multiple subflows. To make sure that no packet is 
+inadvertently dropped, the \code{<packet list>.POP()} method can only be 
+called inside a PUSH or DROP statement.
+
+\begin{lstlisting}[style=RBS,label=lst:schedule-a-packet,caption={Schedule a packet from Q}]
+/* single subflow in ``sbf'' */
+sbf.PUSH(Q.POP());
+
+/* list of subflows in ``sbfs'' */
+IF (!sbfs.EMPTY) {
+	FOREACH(VAR sbf IN sbfs) {
+		sbf.PUSH(Q.TOP);
+	}
+	DROP(Q.POP());
+}
+\end{lstlisting}
 
 
 \subsubsection{Socket Kernel Buffers} \label{skb-annotate}
@@ -664,6 +782,25 @@ On the wire, HTTP/2 is a framed protocol.
 \end{tikzpicture}
 
 http://http2.github.io/http2-spec/index.html\#StreamStates
+
+\subsection{Application Layer Protocol Negotiation}
+
+% newer openssl version (apls support)
+HTTP/2 can be used over the same TCP port as older versions, so browser and 
+server need to negotiate the version. When using HTTP/2 over TLS, as is the 
+only way to use in current browsers, this negotiation is done during the TLS 
+handshake. Two different protocol extensions to TLS have been defined for 
+this purpose. The older one, Next Protocol Negotiation (NPN) was defined in 
+2012 for the SPDY protocol, a precursor of HTTP/2. It is replaced by the more
+recent Application Layer Protocol Negotiation, defined as an official
+TLS extension in 2014 \cite{RFC7301}. The two 
+protocols are very similar, the only difference is that with NPN the negotiation
+was encrypted, while APLN adapted to the common TLS practice of conducting
+negotiations in the clear.
+In any case, we need to use APLN, as that is what modern versions of Chrome 
+and Firefox require, while OpenSSL version 1.0.1, which is available in Debian 
+and Ubuntu repositories only supports NPN. Therefore, we need to build a more 
+recent OpenSSL version from source if using these distributions.
 
 
 \section{Performance of Web Traffic on Multipath TCP}
@@ -882,32 +1019,61 @@ in Section \ref{measurement-script}.
 %alexa_news - 50 top news sites (these are the homepages of the news sites)
 %alexa_science 50 top sites form category 'science'
 %news_article - 12 news articles from news sites listed in alexa_news and some german news sites
-\todo{explain/refer to figures, summarized findings}
 
-%note that we only measured requests before the onLoad event
-%- usually web sites are finished with the onLoad event
-%- e.g. google.com only starts loading its javascript after onLoad, but it is not necessary - site works without js
-%- 
+
+
 \begin{figure}
 	\includegraphics[width=0.9\textwidth]{wps-stackedSizeByCategory2.pdf}
 	\caption{Transferred data for loading web pages, grouped by page category, 
 	content type and relevance for DOM }
+	\label{wps-stackedSizeByCategory2}
 \end{figure}
 
 \begin{figure}
 	\includegraphics[width=0.9\textwidth]{wps-stackedSize-newsArticles.pdf}
-	\caption{stackedSize-newsArticles}
+	\caption{Transferred data for loading articles from different news sites, grouped by
+	content type and relevance for DOM}
+	\label{wps-stackedSize-newsArticles}
 \end{figure}
+
+
+
+In Figure \ref{wps-stackedSizeByCategory2} and \ref{wps-stackedSize-newsArticles} 
+we plotted the transferred data on the Y axis, grouped by the request content 
+types. In every block, the left bar shows the amount of data transferred 
+before the DOMDocumentLoaded was fired, and the right bar the overall amount 
+until the Load event.
+
 
 
 \begin{figure}
 	\includegraphics[width=0.9\textwidth]{wps-requestCountByCategory.pdf}
-	\caption{requestCountByCategory}
+	\caption{Number of requests, grouped by page category, 
+	content type and relevance for DOM }
+	\label{wps-requestCountByCategory}
 \end{figure}
+
+
+\todo{!!!}
+
+
+Interesting is also the difference in page size between the overall top sites 
+and newspaper sites, especially regarding images. This can be partially 
+explained by the fact that half of the top sites are search engine and social 
+network home pages, containing only a search box or a login form, 
+respectively, whereas the newspaper home pages are long illustrated lists of 
+news article teasers.
+On the other hand, the Alexa overall top sites are, with few exceptions, 
+heavily optimized for minimum page size, whereas newspaper sites tend to 
+include a huge amount of third-party JavaScript for advertising. This is also 
+reflected in the amount of origins the resources are fetched from, as 
+visualized in Figure \ref{wps-originCountByCategory}. On average, 73\% of 
+requests where third-party requests.
 
 \begin{figure}
 	\includegraphics[width=0.9\textwidth]{wps-originCountByCategory.pdf}
-	\caption{originCountByCategory}
+	\caption{Number of request origins, group by page category}
+	\label{wps-originCountByCategory}
 \end{figure}
 
 
@@ -940,8 +1106,18 @@ in Section \ref{measurement-script}.
 %Wo kommt die Logik hin?
 %	- a: Server taggt Frames irgendwie, z.B. Inhalt=PageContent / Bild / Script / Style; Push=Ja/Nein; etc…, und Scheduler enthält die Logik die sagt was mit welchem Frame-Typ passieren soll
 %oder b: Server gibt genaue Anweisung an Scheduler, dieser setzt es nur um
-A decision we need to make is where to place the optimization logic. One approach is that the server tags every HTTP/2 frame with information like content or stream type, and the scheduler script decides that to do exactly. This way, there is maximum flexibility for the MPTCP configuration and the server doesn't need to know very much about MPTCP. On the other hand, we need special handling on the scheduler level for every application protocol we want to optimize.
-The other approach is to have several general scheduler algorithms, each with different performance trade-offs, while allowing the application to decide which scheduler algorithm should be enabled. This reduces the dependencies on the scheduler level, but requires more MPTCP specific decision making on the application level. 
+A decision we need to make is where to place the optimization logic. One 
+approach is that the server tags every HTTP/2 frame with information like 
+content or stream type, and the scheduler script decides that to do exactly. 
+This way, there is maximum flexibility for the MPTCP configuration and the 
+server doesn't need to know very much about MPTCP. On the other hand, we need 
+special handling on the scheduler level for every application protocol we 
+want to optimize.
+The other approach is to have several general scheduler algorithms, each with 
+different performance trade-offs, while allowing the application to decide 
+which scheduler algorithm should be enabled. This reduces the dependencies on 
+the scheduler level, but requires more MPTCP specific decision making on the 
+application level. 
 
 We take the former approach, where application specific hints are attached to 
 the data stream, as it is passed down to the operating system. To pass the 
@@ -1020,23 +1196,23 @@ The information passed from the HTTP server to the MPTCP scheduler creates a sid
 \chapter{Implementation}
 %==============================================================================
 
-For this work, we implemented and modified several pieces of software. We 
-extended a web server to pass internal information to the kernel by setting TCP 
-socket options. Therefore, this chapter contains the reasoning behind our 
-choice of the web server to modify, as well as a detailed description of the 
-modifications made. Furthermore, we implemented a set of scripts to instrument 
-a web browser to load web pages, collect information about the process and 
-aggregate it together with information from the operating system's network layer. 
-We also extended a framework for the evaluation of different Multipath TCP 
-schedulers to run aforementioned client and server components. Finally, we 
+For this work, we implemented and modified several pieces of software: (i) we 
+adapted a web server to pass internal information to the kernel by setting TCP 
+socket options; (ii) we 
 implemented a Multipath TCP scheduler as RBS script which takes advantage of the 
-hints given by the web server.
-
+hints given by the web server; (iii) we developed a set of scripts to instrument 
+a web browser to load web pages, collect information about the process and 
+aggregate it together with information from the operating system's network layer; 
+(iv) we extended a framework for the evaluation of different Multipath TCP 
+schedulers to run aforementioned client and server components.
+This chapter contains the reasoning behind our 
+choice of the web server to modify, as well as a detailed description of the 
+implementation.
 
 \section{Choosing a Web Server Platform}
 
 Information about the contents of encrypted HTTP/2 application data is only 
-available with cooperation of the web server is required. More precisely, we 
+available with cooperation of the web server. More precisely, we 
 want to set socket options with hints for the scheduler, depending on 
 information from higher levels. Multiple web servers have been evaluated and 
 based on the criteria set out below, a suitable basis for the implementation 
@@ -1171,10 +1347,10 @@ code over a callback of any new requests.
 According to the HTTP/2 protocol specification each new request is processed 
 in a separate stream. Accordingly, Nghttpd has a \code{Stream} structure 
 which is instantiated for each request and stores relevant information. We 
-extend this class as shown in listing \ref{lst:nghttpd-struct-stream} by a 
+extend this class as shown in Listing \ref{lst:nghttpd-struct-stream} by a 
 \code{scheduling_content_type} field, which is a simplified representation of 
 the response's content type. The possible values of this field are declared 
-in listing \ref{lst:scheduling-content-type-decl}.
+in Listing \ref{lst:scheduling-content-type-decl}.
 
 \begin{lstlisting}[style=C_Code,label=lst:nghttpd-struct-stream,caption={
 	The extended Nghttpd \code{Stream} structure (from \code{HttpServer.h})
@@ -1223,7 +1399,7 @@ OpenSSL. If this wasn't done, each TLS record could contain at most a single
 HTTP/2 frame, which would be inefficient. If \code{wb_} is empty, 
 \code{write_tls} runs \code{fill_wb}, which fetches outgoing data from 
 \code{nghttp2_session_mem_send}, and enqueues it in \code{wb_}. We extend this 
-process with a FIFO implemented as a linked list as declared in listing 
+process with a FIFO implemented as a linked list as declared in Listing 
 \ref{lst:nghttpd-linkedlist-headers}. The FIFO stores metadata about the 
 octets enqueued in \code{wb_}, along with the number of octets this metadata 
 is valid for. 
@@ -1242,7 +1418,7 @@ void skb_prop_push(struct skb_prop_range **list, unsigned int bytes, unsigned in
 \end{lstlisting}
 
 \code{fill_wb} enqueues and \code{write_tls} dequeues the 
-metadata in lockstep with the data. In listing \ref{lst:nghttpd-fill_wb} the 
+metadata in lockstep with the data. In Listing \ref{lst:nghttpd-fill_wb} the 
 code for enqueueing the meta information is highlighted. There is a second
 function where data and metadata are enqueued, which is the 
 \code{send_data_callback}. It is used as a performance optimization to avoid 
@@ -1271,7 +1447,7 @@ identical to \code{fill_wb}.
 
 
 
-The metadata is provided by the function \code{get_skb_property} in listing 
+The metadata is provided by the function \code{get_skb_property} in Listing 
 \ref{lst:nghttpd-get_skb_property}. A command line parameter is used to 
 configure what information to use as the hint. With our optimized scheduler 
 scripts, the \code{scheduling_content_type} is used, therefore mptcp-skb-prop 
@@ -1310,7 +1486,7 @@ signalizes that data can be sent out. Before doing so, it relays the current
 meta information from the FIFO to the TCP stack. Only after writing out the 
 data we can be sure how many octets were really written. Then we remove this 
 number of octets from the write buffer and from the metadata FIFO. This is 
-implemented by the code in listing \ref{lst:nghttpd-write_tls-metarelay}.
+implemented by the code in Listing \ref{lst:nghttpd-write_tls-metarelay}.
 
 \begin{lstlisting}[style=C_Code,label=lst:nghttpd-write_tls-metarelay,caption={
 Relaying metadata (from \code{HttpServer.cc}, method \code{Http2Handler::write_tls})}]
@@ -1342,26 +1518,6 @@ set_rbs_register(1,  // register R1
 \end{lstlisting}
 
 
-
-\subsection{Application Layer Protocol Negotiation}
-
-% newer openssl version (apls support)
-HTTP/2 can be used over the same TCP port as older versions, so browser and 
-server need to negotiate the version. When using HTTP/2 over TLS, as is the 
-only way to use in current browsers, this negotiation is done during the TLS 
-handshake. Two different protocol extensions to TLS have been defined for 
-this purpose. The older one, Next Protocol Negotiation (NPN) was defined in 
-2012 for the SPDY protocol, a precursor of HTTP/2. It is replaced by the more
-recent Application Layer Protocol Negotiation, defined as an official
-TLS extension in 2014 \cite{RFC7301}. The two 
-protocols are very similar, the only difference is that with NPN the negotiation
-was encrypted, while APLN adapted to the common TLS practice of conducting
-negotiations in the clear.
-In any case, we need to use APLN, as that is what modern versions of Chrome 
-and Firefox require, while OpenSSL version 1.0.1, which is available in Debian 
-and Ubuntu repositories only supports NPN. Therefore, we built a more recent 
-OpenSSL version from source and changed the Nghttpd build configuration to use 
-it.
 
 
 \subsection{TLS Record Size}
@@ -1400,7 +1556,7 @@ in \code{/proc/net/mptcp_net/rbs/schedulers}.
 
 Consistent with the scheduler, we need to configure which kind of metadata 
 Nghttpd will supply. Valid metadata indizes for the 
-\texttt{-{}-mptcp-skb-prop=\textit{<index>}} argument are shown in listing 
+\texttt{-{}-mptcp-skb-prop=\textit{<index>}} argument are shown in Listing 
 \ref{rbs-prop-indizes}.
 
 \begin{lstlisting}[style=C_Code,label=rbs-prop-indizes,caption={
@@ -1412,19 +1568,19 @@ Constants defining valid metadata indizes (from \code{mptcp_rbs.h})}]
 \end{lstlisting}
 
 \subsection{URL Query Parameters}
-
+	
 The scheduler hints can be augmented by the following parameters in the URL 
 query string (``GET parameters''). The code parsing these parameters can be 
 found in Annex B.
 In downloaded web sites, the content types often can't be determined by the 
 file extension. Therefore, the \code{rbs_content_type} parameter can override 
 the content type which is used as a scheduler hint. Valid types can be found 
-in listing \ref{lst:scheduling-content-type-decl}.
+in Listing \ref{lst:scheduling-content-type-decl}.
 For testing purposes it proved useful to be able to set the internal 
 registers of the RBS script via the \texttt{rbs\_set\_R\textit{<n>}} 
 parameter. The register number and values depend on the individual scheduler 
 script. Register R1 can't be assigned with this parameter as it is used for 
-the buffer state information (c.f. listing \ref{lst:nghttpd-write_tls-bufferstate}).
+the buffer state information (c.f. Listing \ref{lst:nghttpd-write_tls-bufferstate}).
 
 
 
@@ -1541,9 +1697,15 @@ IF (Q.EMPTY && applicationQueuesEmpty == 1) {
 In our analysis of web page structure, as well as in the later evaluations of 
 collaborative schedulers, we use the timing metrics described in Section 
 \ref{metrics-web-perf}. These are visible in the Google Chrome web browser's 
-developer tools, and are available via the Chrome Debugging Protocol\footnote{%
-\url{https://developer.chrome.com/devtools/docs/debugger-protocol}}. 
-We use this protocol from a Python script, \code{measure_web_requests.py} (reproduced in Annex A), to 
+developer tools, however, it is necessary to collect and average the timings
+of many page loads, because in a Mininet simulation the results can be 
+influenced by multitasking effects, whereas in real networks transient delays 
+and packet drops can occur on any middlebox along the route.  Therefore, we 
+need to record them in an automated way, which is possible by directly 
+connecting to the API the developer tools use internally, the Chrome 
+Debugging Protocol\footnote{\url{https://developer.chrome.com/devtools/docs/debugger-protocol}}.
+We built the Python script \code{measure_web_requests.py} (reproduced in 
+Annex \ref{annex-measure_web_requests}) to 
 instrument the web browser to navigate to pages we want to measure, and to 
 retrieve the network and tracing data.
 
@@ -1564,6 +1726,18 @@ measure. While loading, the tracing component of Chrome stores all events in
 an internal buffer. The network component sends us events of every resource 
 load in real time. We accumulate the number of requests and the response sizes, 
 grouped by origin (domain name and port) and by content type.
+
+%note that we only measured requests before the onLoad event
+%- usually web sites are finished with the onLoad event
+%- e.g. google.com only starts loading its javascript after onLoad, but it is not necessary - site works without js
+%- 
+We stop the measurement when the Load event fires. This means all resources 
+which are referenced in the document, even scripts with the async attribute, 
+are, by definition, included. Requests finishing after the Load event fired, 
+like AJAX requests, are not included in the results. Also, some websites that 
+don't require JavaScript for their operation, e.g. the google.com homepage, 
+only start loading their JavaScript after the Load event, causing it to be 
+excluded from the result.
 
 As a result, the script prints a report with tables of the tracing event timings
 and request numbers and sizes.
@@ -1708,8 +1882,17 @@ as too complex and not necessary for our evaluations.
 %Downloading web pages with browser/wget and delivering with nghttpd - Problem: how to handle dynamic or third-party requests?
 
 This resulted in a mixture of above mentioned strategies:
-In simulations on real networks, we chose to keep most third party requests as-is, loading the resource from the original server, especially advertisements, tracking snippets and complex libraries from Content Delivery Networks (CDNs). This is quite realistic, because most of these requests will stay third-party, even if website owners decide to optimize for HTTP/2.
-Our virtual networks were completely separated from the internet, therefore all third-party requests were rejected at the network level. However, we downloaded simple JavaScript libraries (consisting of single files) and served them locally, modifying the web page to fetch them from the local server. This is a simple optimization which is realistic to be made by website operators, and allowed us to keep the simulation simple. 
+In simulations on real networks, we chose to keep most third party requests 
+as-is, loading the resource from the original server, especially 
+advertisements, tracking snippets and complex libraries from Content Delivery 
+Networks (CDNs). This is quite realistic, because most of these requests will 
+stay third-party, even if website owners decide to optimize for HTTP/2.
+Our virtual networks were completely separated from the internet, therefore 
+all third-party requests were rejected at the network level. However, we 
+downloaded simple JavaScript libraries (consisting of single files) and 
+served them locally, modifying the web page to fetch them from the local 
+server. This is a simple optimization which is realistic to be made by 
+website operators, and allowed us to keep the simulation simple. 
 
 % Cancel/reject all third party requests (in-browser / iptables)
 %	Pro: Easy, reproducible
@@ -1734,8 +1917,15 @@ We based our measurements on two different methods. We simulated network situati
 \subsection{Mininet}
 
 As a virtual network environment, we use Mininet, ``a system for rapidly 
-prototyping large networks on the constrained resources of a single laptop'', 
-by \textcite{Lantz10Mininet}.
+prototyping large networks on the constrained resources of a single laptop''.
+It uses the network namespacing feature of Linux to create many virtual network
+interfaces, but make only some of them visible to each process.
+This allows us to run normal client and server software inside the simulated
+environment. %It also has many features we don't use, like the simulation of 
+%complex ethernet switches.
+ 
+
+
 \todo{short intro to mininet}
 
 \todo{our setup with mininet}
@@ -1818,7 +2008,7 @@ To confirm the measurements we conducted in Mininet, we ran the same software on
 
 \section{Evaluations}
 
-\todo{something}
+
 
 \subsection{Evaluation A (``Bad Wi-Fi'')}
 % zeigen - implementiertung funktioniert grundsätzlich
@@ -1854,7 +2044,9 @@ On the Wikipedia page, all styles and scripts are included in the \code{<head>
 version, we included two big images below the fold that are not required for 
 the rendering.
 
-A scheduler script was designed to send the images only over the ``cheap'' Wi- Fi subflow, and allow the other, more time-critical data, to choose from the available subflows the one with the lowest round-trip time.
+A scheduler script was designed to send the images only over the ``cheap'' Wi-Fi
+subflow, and allow the other, more time-critical data, to choose from the 
+available subflows the one with the lowest round-trip time.
 
 
 
@@ -1874,72 +2066,44 @@ A scheduler script was designed to send the images only over the ``cheap'' Wi- F
 %sudo python2 execute.py --congestion_control cubic --network badWifiHotspot -a http2 --scheduler 'min_rtt_ctype_aware.txt min_rtt_advanced.txt'
 %badwifi.ipynb
 
-\begin{lstlisting}[style=RBS,label=lst:sched_eval_a,caption={RBS Scheduler Script for Evaluation A (``Bad Wi-Fi'')},numbers=left]
-/*
- * This scheduler sends packets on the subflow with the lowest RTT which has congestion window available
- *  ... except images, they are sent only on the "cheap" (non-backup) subflow (e.g. Wi-Fi instead of 3G)
-*/
-SCHEDULER min_rtt_ctype_aware;
+\begin{lstlisting}[style=RBS,label=lst:sched_eval_a,caption={RBS Scheduler Script for Evaluation A (``Slow Wi-Fi'')},numbers=left]
 
-VAR SKB_CONTENT_NOSTREAM = 1;
-VAR SKB_CONTENT_DOCUMENT = 2;
-VAR SKB_CONTENT_SCRIPT   = 3;
-VAR SKB_CONTENT_STYLE    = 4;
-VAR SKB_CONTENT_IMAGE    = 5;
-VAR SKB_CONTENT_OTHER    = 6;
-
-/* only use subflows which have CWND left*/
-VAR usableSbfs = SUBFLOWS.FILTER(sbf => sbf.CWND > sbf.SKBS_IN_FLIGHT);
-
-/* no subflows available? do nothing. */
-IF (usableSbfs.EMPTY) { RETURN; }
-
-/* send packets from resend buffer redundantly on the fastest new subflows */
-IF (!RQ.EMPTY) {
-	usableSbfs.FILTER(sbf => !RQ.TOP.SENT_ON(sbf)).MIN(sbf => sbf.RTT).PUSH(RQ.POP());
-	RETURN;
-}
-
-IF (!Q.EMPTY) {
-	/* simplified content type is passed along by the web server */
-	VAR content_type = Q.TOP.USER;
-
-	IF (Q.TOP.USER >= SKB_CONTENT_IMAGE) {
-		/* the subflows marked as "BACKUP" are filtered out */
-		usableSbfs.FILTER(sbf => !sbf.IS_BACKUP).MIN(sbf => sbf.RTT).PUSH(Q.POP());
-	} ELSE {
-		usableSbfs.MIN(sbf => sbf.RTT).PUSH(Q.POP());
-	}
-}
 \end{lstlisting}
 
-\todo{description and interpretation of results}
 
-For comparison we use two reference schedulers, one that only transmits on 
-the non-backup subflow, which is comparable to single path TCP, and one that 
-ignores the backup flag and always uses the fastest available subflow.
+For comparison we use two reference schedulers, one that is single path TCP 
+equivalent as it only transmits on the non-backup subflow, and one 
+``aggressive'' scheduler that ignores the backup flag and always uses the 
+fastest available subflow.
 
 We run the simulation multiple times for every combination of scheduler, 
 network and web page and look at the averaged received bytes per interface, 
-as well as the browser timings. The results show that with the content-aware 
-scheduler we have the same time to first meaningful paint as the reference 
-scheduler for both the original and modified Wikipedia homepage, while saving 
-60 kB and 1.3 MB of data volume, respectively, on the cellular connection. 
-For the CNN artice
+as well as the browser timings. 
+
+In figure \ref{eva1-loadtimes} the timing metrics are shown, grouped by page
+and used scheduler. Comparing the results of using the content-aware scheduler 
+and the aggressive reference scheduler, the time to first meaningful paint is 
+the same, while saving a considerable amount of data volume on the cellular 
+connection. 
+Compared to using the high latency subflow as the only path, the
+schedulers which use multiple paths are faster by multiple seconds
+For the CNN article, the data volume saved is 4.6 MB per page load as shown 
+in figure \ref{eva1-rxbytes} and the speed up of the first meaningful 
+paint event is from 4.5 to 2.8 seconds.
 
 \begin{figure}
 \centering
-	\includegraphics[width=0.8\textwidth]{eva1-rxbytes.pdf}
+	\includegraphics[width=0.9\textwidth]{eva1-rxbytes.pdf}
 	\caption{Received bytes per interface for Evaluation A }
 	\label{eva1-rxbytes}
 \end{figure}
-
 \begin{figure}
 \centering
-	\includegraphics[width=1\textwidth]{eva1-loadtimes.pdf}
-	\caption{Page load times for Evaluation A }
+	\includegraphics[width=0.9\textwidth]{eva1-loadtimes-stacked.pdf}
+	\caption{Mean page load times for Evaluation A }
 	\label{eva1-loadtimes}
 \end{figure}
+
 
 
 % simulated netw. with mininet
@@ -1959,27 +2123,61 @@ For the CNN artice
 % web site:
 % - synthetic web site with:
 
-
-
-
 % later ajax redundant
 % oder images only one sbf
 
 
-\subsection{Evaluation B (``Both lossy'') (TODO!)}
 
-We build an optimized scheduler for situations where multiple lossy network 
-connections are available.
-When the packet loss raises above a defined threshold, we start sending data 
-redundantly. To conserve bandwidth, we only do redundant transmissions for 
-latency critical data. The application provides scheduling hints whether the 
-data is latency critical or not.
+
+\subsection{Evaluation B (``Real World'') (TODO!)}
+
+
+
+\subsection{Evaluation C (``Both lossy'') (TODO!)}
+
+We simulated a network with a similar scenario as Evaluation A, but now the 
+Wi-Fi is faster than the LTE network in latency and bandwidth, but has a higher 
+packet loss rate of 3\%. 
+According to \textcite{Chen2013}, Wi-Fi has average loss rates from 1\% to 3\%,
+while for LTE it is below 0.1\%. They also measured 30ms as average RTT for 
+Wi-Fi, and at least 60ms for LTE, which we used for the simulation.
+
+
+
+We build an optimized scheduler for browsing the web in situations where multiple network 
+connections are available, but they are all lossy. 
+The idea is that if the packet loss raises above a defined threshold, we start sending data 
+redundantly on both paths. Sending every packet twice will double the bandwidth usage,
+but will also double the probability that at least one of the packets won't be lost.
+To conserve bandwidth, we only do redundant transmissions for 
+latency critical data. The application provides scheduling hints to help the scheduler decide whether the 
+data is latency critical or not. We used the content type again as 
+scheduling hints, and declared connection setup, main document, scripts and stylesheets
+as latency critical. 
+As reference schedulers we used the same minimum round-trip time scheduler as in Evaluation A,
+and additionally a scheduler which sends all segments redundantly regardless of content type.
+
+While simulating lossy networks, we noticed that for randomly distributed loss, the results can vary widely between page loads, depending on when during the connection the packet loss occurs. This can be offset by repeating many times and averaging the results. For the results presented below, we loaded the page 100 times with every scheduler.
+The packet loss on both paths was set to 5 percent.
+
+
+\todo{doesn't work?  ...what might be the reasons}
+
+
+\subsection{Evaluation D (``Lossy Wi-Fi'') (TODO!)}
+
+
+
+
 
 \todo{TODO}
 
 %maybe redundant for ``important'' stuff?
 % ...combination, switch dependent on RTT and LOSS -- maybe do this in a separate Eval C
 
+
+%what could be done:
+%try it over a real lossy network or over a simulation with better simulated loss
 
 
 
@@ -2015,6 +2213,12 @@ The client (web browser) side of optimizations was mostly excluded from our cons
 % it might be possible to do a good heuristical approach here, without support from the browser, only in the mptcp scheduler
 
 %-------------------------------------------------------
+%we only ran a single page load in our evaluations
+% one could look at the behavior for further loads, when the MPTCP/TLS/HTTP2 connection is already established
+% also, dynamic sites use xhr requests after they have load - these can be performance critical (e.g. if triggered by user interaction and results should be displayed) or less so (e.g. tracking user clicks, or refresh stuff regularly in the background) 
+
+
+%-------------------------------------------------------
 %more interfaces
 
 % ***Extension to three or more interfaces
@@ -2036,7 +2240,7 @@ Some optimizations rely on manually providing resource priorities and dependenci
 
 %Automatisches Aufbauen von Dependency Graphs
 
-^^
+
 %-------------------------------------------------------
 %real web server
 
@@ -2056,16 +2260,20 @@ Some optimizations rely on manually providing resource priorities and dependenci
 \printbibliography
 
 
-\chapter*{Appendices}
+\begin{appendices}
 
-\section*{Annex A: measure\_web\_requests.py}
+\chapter{Web Request Measurement Script}\label{annex-measure_web_requests}
 
-\lstinputlisting[language=Python]{measure_web_requests.py}
+\lstinputlisting[language=Python,caption={
+\code{measure_web_requests.py}
+}]{measure_web_requests.py}
 
 
-\section*{Annex B: prepare\_response}
+\chapter{Content Type Detection Code}\label{annex-prepare_response}
 
-\begin{lstlisting}[style=C_Code]
+\begin{lstlisting}[style=C_Code,caption={
+\code{HttpServer.cc}, function \code{prepare_response}
+}]
 void prepare_response(Stream *stream, Http2Handler *hd,
                       bool allow_push = true) {
   [...]
@@ -2143,5 +2351,111 @@ void prepare_response(Stream *stream, Http2Handler *hd,
                            file_ent->length, file_ent->content_type, &data_prd);
 }
 \end{lstlisting}
+
+
+
+
+
+\chapter{Content Type and Cost Aware Scheduler}\label{annex-sched_eval_a}
+
+\begin{lstlisting}[style=RBS,label=lst:sched_eval_a,caption={RBS Scheduler Script for Evaluation A (``Bad Wi-Fi'')},numbers=left]
+/*
+ * This scheduler sends packets on the subflow with the lowest RTT which has congestion window available
+ *  ... except images, they are sent only on the "cheap" (non-backup) subflow (e.g. Wi-Fi instead of 3G)
+*/
+SCHEDULER min_rtt_ctype_aware;
+
+VAR SKB_CONTENT_NOSTREAM = 1;
+VAR SKB_CONTENT_DOCUMENT = 2;
+VAR SKB_CONTENT_SCRIPT   = 3;
+VAR SKB_CONTENT_STYLE    = 4;
+VAR SKB_CONTENT_IMAGE    = 5;
+VAR SKB_CONTENT_OTHER    = 6;
+
+/* only use subflows which have CWND left*/
+VAR usableSbfs = SUBFLOWS.FILTER(sbf => sbf.CWND > sbf.SKBS_IN_FLIGHT);
+
+/* no subflows available? do nothing. */
+IF (usableSbfs.EMPTY) { RETURN; }
+
+/* send packets from resend buffer redundantly on the fastest new subflows */
+IF (!RQ.EMPTY) {
+	usableSbfs.FILTER(sbf => !RQ.TOP.SENT_ON(sbf)).MIN(sbf => sbf.RTT).PUSH(RQ.POP());
+	RETURN;
+}
+
+IF (!Q.EMPTY) {
+	/* simplified content type is passed along by the web server */
+	VAR content_type = Q.TOP.USER;
+
+	IF (Q.TOP.USER >= SKB_CONTENT_IMAGE) {
+		/* the subflows marked as "BACKUP" are filtered out */
+		usableSbfs.FILTER(sbf => !sbf.IS_BACKUP).MIN(sbf => sbf.RTT).PUSH(Q.POP());
+	} ELSE {
+		usableSbfs.MIN(sbf => sbf.RTT).PUSH(Q.POP());
+	}
+}
+\end{lstlisting}
+
+\chapter{Content-Based Redundant Scheduler}\label{annex-sched_eval_b}
+
+\begin{lstlisting}[style=RBS,label=lst:sched_eval_b,caption={RBS Scheduler Script for Evaluation A (``Bad Wi-Fi'')},numbers=left]
+/*
+ * send packets redundant if skb user property is set
+*/
+
+SCHEDULER user_redundant;
+
+VAR SKB_CONTENT_NOSTREAM =  1;
+VAR SKB_CONTENT_DOCUMENT =  2;
+VAR SKB_CONTENT_SCRIPT =    3;
+VAR SKB_CONTENT_STYLE =     4;
+VAR SKB_CONTENT_IMAGE =     5;
+VAR SKB_CONTENT_OTHER =     6;
+
+/* only use subflows which have CWND left*/
+VAR usableSbfs = SUBFLOWS.FILTER(sbf => sbf.CWND > sbf.SKBS_IN_FLIGHT);
+
+IF (usableSbfs.EMPTY) {
+    RETURN;
+}
+
+/* send packets from resend buffer */
+IF (!RQ.EMPTY) {
+	/* is the user property set to "1"? -> important packet, send redundant */
+	VAR notSentOnSbfs = usableSbfs.FILTER(sbf => !RQ.TOP.SENT_ON(sbf));
+	IF (!notSentOnSbfs.EMPTY) {
+		IF (Q.TOP.USER <= SKB_CONTENT_STYLE) {
+			FOREACH(VAR sbf IN notSentOnSbfs) {
+				sbf.PUSH(RQ.TOP);
+			}
+			DROP(RQ.POP());
+		} ELSE {
+			notSentOnSbfs.MIN(sbf => sbf.RTT).PUSH(RQ.POP());
+		}
+		RETURN;
+	}
+}
+
+IF (!Q.EMPTY) {
+	/* is the user property set to "1"? -> important packet, send redundant*/
+	IF (Q.TOP.USER <= SKB_CONTENT_STYLE) {
+		FOREACH(VAR sbf IN usableSbfs) {
+			sbf.PUSH(Q.TOP);
+		}
+		DROP(Q.POP());
+	} ELSE {
+		usableSbfs.MIN(sbf => sbf.RTT).PUSH(Q.POP());
+	}
+}
+\end{lstlisting}
+
+
+
+
+
+\end{appendices}
+
+
 
 \end{document}
