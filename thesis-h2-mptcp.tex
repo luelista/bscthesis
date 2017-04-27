@@ -45,6 +45,10 @@
 \usepackage[toc,page]{appendix}
 
 
+\usepackage{caption}
+\usepackage{subcaption}
+
+
 %--------------------------------------------------------
 % configuration
 %--------------------------------------------------------
@@ -370,7 +374,7 @@ This section covers the background knowledge on Multipath TCP which is required 
 \subsection{Architecture of Multipath TCP}
 %Following that, we describe the architecture of the Multipath TCP protocol and implementation. 
 
-\textcite{Ford2008} proposed that endpoint addressing and congestion control 
+\textcite{Ford2008} propose that endpoint addressing and congestion control 
 should be factored out of the Internet transport layer into a separate 
 Endpoint Layer and Flow Layer, respectively, to address ``roadblocks to 
 Internet evolution'' caused by the fact that middleboxes such as ``firewalls 
@@ -468,7 +472,7 @@ The current reference implementation\footnote{\url{http://multipath-tcp.org/}} i
 %https://support.apple.com/en-us/HT201373
 The first implementation of Multipath TCP was written as a user-space proxy\footnote{\url{https://open-innovation.alcatel-lucent.com/projects/mptcp-proxy}} by Hampel at Bell Labs, and is no longer maintained.  
 %other implementations
-The most widely deployed implementation is found in Apple's XNU kernel \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the Siri personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
+The most widely deployed implementation is found in Apple's XNU kernel\footnote{\url{https://opensource.apple.com/source/xnu/xnu-2422.1.72/bsd/netinet/mptcp.c.auto.html}} \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the Siri personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
 All aforementioned implementations are open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
 
 \textcite{Bonaventure2016Deploy} report a deployment by some cellular network 
@@ -516,13 +520,30 @@ They also recommend that socket options on a Multipath TCP meta-socket should be
 
 
 
-\subsection{Performance Evaluations}
+\subsection{Performance Evaluations} \label{relwork-mptcp-performance}
 %We present studies evaluating and optimizing Multipath TCP performance, [...]
 
-\todo{We present studies evaluating and optimizing Multipath TCP performance, [...]}
+%\todo{We present studies evaluating and optimizing Multipath TCP performance, [...]}
 
 %Experimental evaluation of multipath TCP schedulers
-\textcite{Paasch2014} 
+\textcite{Paasch2014} propose a modular Multipath TCP scheduler framework in 
+the Linux kernel and use this framework to evaluate schedulers in a Mininet 
+simulation and in a real world testbed. 
+Schedulers compared are a round-robin (RR) scheduler, and several variations 
+of a lowest-RTT-first (LowRTT) scheduler. They find that for application 
+limited flows, ``the RR scheduler is particularly bad in terms of application 
+delay'', but for bulk transfers, it performs similar to LowRTT. 
+For all schedulers alike, once ``all congestion windows are filled, the 
+scheduling becomes ack-clocked'', meaning that packets are always scheduled 
+into the next subflow where congestion window space gets available.
+
+They also highlight that bad schedulers can trigger head-of-line blocking: 
+paths with different delays resulting in out-of-order packet arrival, forcing 
+``the packets that are scheduled on the low-delay subflow [...] to `wait' for 
+the high-delay subflow's packets to arrive in the out-of-order queue of the 
+receiver'' to fulfill Multipath TCP's in-order delivery guarantees. 
+Therefore, ``Multipath scheduling should ideally be done in a way that the 
+data is received in-order.''
 
 \textcite{Chen2013} evaluate the download times for files of different size 
 using Multipath TCP over Wi-Fi and cellular connections to using only one of 
@@ -565,9 +586,14 @@ The rule-based scheduler by \textcite{RBS} is a programmable Multipath TCP sched
 \subsubsection{Scheduler Scripts}
 
 In the later chapters, we show several scheduler scripts written in the RBS language. To allow the reader to follow these scripts, we give an introduction to the core objects used in the scripts.
-The syntax of RBS is similar to JavaScript, with the most obvious difference that keywords are written in upper-case. 
+The syntax of RBS is similar to C, separating statements with the semicolon and using braces for blocks. A visible difference is that keywords are written in upper-case. The control flow elements available are if statements in the form \texttt{IF (condition) \{ ... \} ELSE \{ ... \}}; and a loop to iterate over all elements in a list as \texttt{FOREACH (VAR item IN list) \{ ... \}}. The execution of a script can be stopped at any point with the \code{RETURN} statement. 
 
-\paragraph{Lists}
+\paragraph{Variables and Registers}
+
+Variables are always immutable and can be declared and assigned with \code{VAR myvariable = ...}. They keep their value only during the current script execution. To store state across calls to the scheduler, the registers R1 to R6 can be used. They are always of type integer, therefore it's not possible to store objects or lists of objects permanently. To assign a register, the SET function is called like this: \code{SET(R1, 42)}.
+
+
+\paragraph{Queues, Lists and Objects}
 The \code{Q} and \code{RQ} variables provide access to packet list objects, 
 containing the sending queue and the retransmission queue, respectively. As 
 long as any of these queues contains packets, the script is run in an 
@@ -708,13 +734,37 @@ to schedulers, and to view \code{SSL_write} as equivalent to \code{write}.
 
 \section{Application Layer: HTTP/2 and HTML}
 
-The HyperText Transfer Protocol (HTTP) is the protocol which is used by web browsers to load web sites from web servers. But since its inception in 1993, web sites have changed a lot, which caused the need for improvements in HTTP. For example, modern web sites often consist of hundreds of individual files. With classic HTTP/1.0, a new TCP connection is established for every file, which needs three round trips. If encryption is used, an individual TLS handshake is performed as well, which needs another four round trips. To improve the situation, connection keep alive was introduced with HTTP/1.1, an extension which allows to use the same connection for multiple downloads. 
-Another problem is the verbosity of HTTP/1's text-based protocol. The meta data (HTTP header) is transmitted as human-readable text, which makes debugging easier, but uses more bandwidth and is more complex to parse. There have been approaches at compressing the headers, but this caused security problems and was therefore not 
-The web has come a long way since the introduction of HTTP/0.9 in 1993. Many small improvements have been made in the meantime, all carefully providing backward compatibility. But web applications have become so intricate, and users so accustomed to responsive interactive services, that a clear break had to be made. Therefore, HTTP/2 \cite{RFC7540_HTTP2} has been specified. To allow easier adaption, the semantics were kept intact, while the underlying protocol was changed completely: A only seemingly simple text-based protocol was replaced with a more efficient, precisely specified binary protocol. 
-The new feature most relevant to us are multiplexed streams which allow all data to be transferred over few, long-lived, thus more efficient TCP connections. The multiplexing also prevents head-of-line blocking and allows prioritizing the most time-critical resources.
+The HyperText Transfer Protocol (HTTP) is the protocol which is used by web 
+browsers to load web sites from web servers. But since its inception in 1993, 
+web sites have changed a lot, which caused the need for improvements in HTTP. 
+For example, modern web sites often consist of hundreds of individual files 
+and have interactive components. With classic HTTP/1.0, a new TCP connection 
+is established for every file download, which needs three round trips. If 
+encryption is used, an individual TLS handshake is performed as well, which 
+needs another four round trips. To improve the situation, connection keep-alive
+and request pipelining was introduced with HTTP/1.1, allowing to use 
+the same connection for multiple downloads. However, the responses have to be 
+sent by the server in the same order as the requests were made, leading to 
+the problem of head-of-line blocking when the earlier responses take longer 
+to compute at the server.
+Another problem is the verbosity of the text-based HTTP/1. The meta data 
+(HTTP header) is transmitted as human-readable text, which makes debugging 
+easier, but uses more bandwidth and is more complex to parse. Compressing the 
+headers with algorithms like gzip has caused security problems and was 
+therefore not pursued.
 
-
-As opposed to older versions, HTTP/2 is based on long-lived TCP connections. Therefore it can utilize the additional sub-flow capacity more often. During a single connection, different types of requests are processed, including loading a document and resources required to display it, loading auxiliary content like images below the fold, and user-initiated AJAX requests. Every type of request has different performance needs, which makes it especially interesting for cooperation-based optimization approaches.
+As we have seen, there are many issues with classic HTTP, and many small 
+improvements have been made, all carefully providing backward compatibility. 
+But web applications have become so intricate, and users so accustomed to 
+responsive interactive services, that a clear break had to be made. 
+Therefore, HTTP/2 \cite{RFC7540_HTTP2} has been specified. To allow easier 
+adaption, the semantics were kept intact, while the underlying protocol was 
+changed completely: the only seemingly simple text-based protocol was 
+replaced with a more efficient, precisely specified binary protocol. 
+The new feature most relevant to us are multiplexed streams which allow all 
+data to be transferred over fewer, long-lived, thus more efficient TCP 
+connections. The multiplexing also avoids head-of-line blocking and allows 
+prioritizing the most time-critical resources.
 
 
 %``HTTP/2 is a binary, rather than text, protocol, making it more compact and efficient
@@ -723,65 +773,56 @@ As opposed to older versions, HTTP/2 is based on long-lived TCP connections. The
 %HTTP/2 has a complex prioritization scheme to help browsers request the most-needed files first, which is fully supported in NGINX (SPDY had a simpler scheme)''
 %https://www.nginx.com/blog/7-tips-for-faster-http2-performance/
 
+\subsection{Frames, Streams and Priorities} \label{http2-frame-types}
 
-\subsection{Optimizing HTTP}
+%\todo{wie sehen frames aus und welche typen gibt es -> zusammenfassen aus http/2 spec}
 
-\todo{...}
+\begin{wrapfigure}{r}{0.57\textwidth}
+\centering
+	\includegraphics[width=0.57\textwidth]{http2-state-machine.pdf}
+	\caption{HTTP/2 Stream State Machine \cite{RFC7540_HTTP2}}
+	\label{http2-state-machine}
+\end{wrapfigure}
 
-(web performance? http2 performance?)
+On the wire, HTTP/2 is a framed protocol. A connection is started with a 
+connection preface sent by client, which is a fixed sequence of 24 bytes. 
+After that, all data is exchanged in frames. The first frame the server sends 
+is always of type SETTINGS. 
+A frame consists of a 9-byte header, followed by data whose length is 
+specified in the header. Besides the header contains the frame type, 
+type-specific flags, a reserved bit, and a stream identifier.
 
-\textcite{klotski2015}
+In the specification \cite{RFC7540_HTTP2}, ten frame types are defined: the 
+DATA frame, which is used to transmit request and response payloads, as 
+well as optional padding; the HEADERS and CONTINUATION frame types, carrying 
+the HTTP headers of a request or response; the PRIORITY frame the browser can 
+use to specify the priority of a stream; the RST\_STREAM frame which can be 
+used to immediately close a stream; the SETTINGS frame which is used as a 
+handshake at connection setup, and can also be sent later to change various 
+connection settings; the PUSH\_PROMISE sent by the server to inform the 
+client of a server-push stream; the PING frame as a heartbeat of idle 
+connections; the GOAWAY frame to close a stream or the whole connection in 
+case of errors; and WINDOW\_UPDATE for HTTP/2's internal flow control 
+mechanism.
 
-(general article about HTTP/2 as optimization of http)
+HTTP/2 defines a complex state machine of stream states visualized in 
+Figure \ref{http2-state-machine}, similar to the TCP state machine. No
+three way handshake is necessary as the identity of the 
+other peer is guaranteed by the underlying protocols.
+The HEADERS frame has a dual role as it is also used to open a new stream 
+when sent with a new stream identifier. By setting the END\_STREAM flag on
+a packet, an endpoint can notify its peer that it will send no more data on
+this stream, sending the stream in the ``half-closed'' state. Once the peer
+answers with an END\_STREAM, the stream is considered ``closed''.
 
-\textcite{RFC7540_HTTP2}
-
-\subsection{Frames and Frame Types} \label{http2-frame-types}
-
-\todo{wie sehen frames aus und welche typen gibt es -> zusammenfassen aus http/2 spec}
-
-On the wire, HTTP/2 is a framed protocol.
-
-\subsection{Streams and Priorities}
-
-\todo{was sind streams, warum gibt es sie, wie werden sie priorisiert -> zusammenfassen aus http/2 faq}
-
-
-\todo{diagramm : verschönern oder rauswerfen?}
-
-\begin{tikzpicture}[->,>=stealth',shorten >=1pt,auto,node distance=2.8cm,
-	semithick]
-	\tikzstyle{every state}=[draw, rectangle]
-
-	\node[initial,state](idle){idle};
-
-	\node[state, below left =of idle](rsv_loc){reserved (local)};
-	\node[state, below right= of idle](rsv_rem){reserved (remote)};
-	\node[state, below right =of rsv_loc](open){open};
-
-	\node[state, below left=of open](hc_rem){half closed (remote)};
-	\node[state, below right=of open](hc_loc){half closed (local)};
-
-	\node[state, below right=of hc_rem](closed){closed};
+The priority of a stream can be included in the HEADERS frame, and changed 
+at any time by sending a PRIORITY frame. It is expressed as a recursive
+dependency on other streams, combined with a weighting factor to give the
+priority of stream relative to its siblings depending on the same parent stream.
 
 
-	\path (idle) edge node {send PP} (rsv_loc)
-	(idle) edge node {recv PP} (rsv_rem)
-	(idle) edge node {send H/recv H} (open)
-	(rsv_loc) edge [bend right=100] node[left] {send R/recv R} (closed)
-	(rsv_rem) edge [bend left=70] node[right] {send R/recv R} (closed)
-	(rsv_loc) edge node {send H} (hc_rem)
-	(rsv_rem) edge node {recv H} (hc_loc)
-	(open) edge node {recv ES} (hc_rem)
-	(open) edge node {send R/recv R} (closed)
-	(open) edge node {send ES} (hc_loc)
-	(hc_rem) edge node {send ES/send R/recv R} (closed)
-	(hc_loc) edge node {recv ES/send R/recv R} (closed)
-	;
 
-\end{tikzpicture}
 
-http://http2.github.io/http2-spec/index.html\#StreamStates
 
 \subsection{Application Layer Protocol Negotiation}
 
@@ -809,13 +850,23 @@ recent OpenSSL version from source if using these distributions.
 %HTTP/1.1 mostly benefits from Multipath TCP for larger file downloads because the TCP connections are often closed after one download, whereas the overhead of establishing auxilliary paths is not worthwile for downloading only one small file. In some studies it has been shown that the HTTP/1.1 performance is worse with MPTCP that with single path TCP on the same connection. Especially the common HTTP/1.1 optimization practice of sharding (spreading files among many different origins).
  
 Inherent in Multipath TCP operation is some overhead of discovering and establishing multiple paths when the connection is set up. Older versions of HTTP use many short-lived TCP connections, so the overhead of multipath initialization can shatter the performance improvements of Multipath TCP. Combined with unmatched expectations of the browser, there are situations where Multipath TCP can hurt the HTTP/1.1 performance compared with single path TCP \cite{han2015mwebmptcp}. However, when downloading large files over HTTP/1.1, it can benefit from combined throughput of multiple paths, as the overhead of establishing gets insignificant.
-HTTP/2 is better suited to use with Multipath TCP, as many small requests are coalesced into one long-running TCP connection.
+HTTP/2 is better suited to use with Multipath TCP, as many small requests are coalesced into one long-running TCP connection.  The overhead of establishing subflows gets less significant, and it can utilize the additional sub-flow capacity better as few
 
 
 
-\section{Measuring Web Performance}
+\section{Web Performance}
 
-\todo{evtl  merge mit section darüber}
+\todo{...}
+
+(web performance? http2 performance?)
+
+\textcite{klotski2015}
+
+(general article about HTTP/2 as optimization of http)
+
+\textcite{RFC7540_HTTP2}
+
+
 
 \textcite{han2015mwebmptcp} \todo{ kurze Zusammenfassung }
 
@@ -836,7 +887,7 @@ HTTP/2 is better suited to use with Multipath TCP, as many small requests are co
 
 
 
-\subsection{Categorizing web page components}
+%\subsection{Categorizing web page components}
 
 %Automatische Einstufung von Seitenbestandteilen (HTTP Requests) in Relevanz / User Utility
 %-> nicht Thema der Arbeit, aber evtl. relevant für praktische Umsetzung
@@ -1080,6 +1131,12 @@ requests where third-party requests.
 
 \clearpage
 
+\begin{figure}
+	\includegraphics[width=1\textwidth]{http2_flow.pdf}
+	\caption{TCP, TLS and HTTP/2 connection setup flow}
+	\label{http2_flow}
+\end{figure}
+
 
 \section{Interaction between Transport and Application Layer} \label{approach-interaction}
 
@@ -1185,7 +1242,7 @@ The transmitting application signals the state of its outgoing buffers to the sc
 
 
 \section{Security Considerations}
-The information passed from the HTTP server to the MPTCP scheduler creates a side channel bypassing TLS encryption. It needs to be considered whether the passed data or the observable scheduler decisions based on this data could help an adversary. Some information are only protected by HTTP/2 and would be exposed on HTTP/1.1 connections anyway, like the length of individual resources. Others, like the content type, might be not available to the attacker otherwise.
+The information passed from the HTTP server to the MPTCP scheduler creates a side channel bypassing TLS encryption. It needs to be considered whether the passed data or the observable scheduler decisions based on this data could help an adversary. Some information are only protected by HTTP/2 and would be exposed on HTTP/1.1 connections anyway, like the length of individual resources. Others, like the content type, might be not available to the attacker otherwise. Therefore, content-type aware schedulers should be used only if the knowledge about the composition of the downloaded web site is not considered security critical information.
 
 
 
@@ -1835,20 +1892,27 @@ Thereafter, the gathered findings are presented and analyzed.
 
 \section{Selection of Sample Web Pages}
 
-We have to decide which web sites to measure.
+When choosing which web sites to measure, we have two general possibilities, 
+either using existing web sites from the internet, or building our own 
+synthetic test pages. In the first case, we can select pages by popularity, 
+for example the Alexa top sites used in Section \ref{page-structure-findings}.
+Another criterion can be whether the site is often used on mobile or 
+desktop devices. We can also hand-select some sites which feature an 
+interesting structure, problem or optimization potential. This can be sites 
+with long text content, big images, large number of requests, or similar.
+When building synthetic content, we can also create typical sites according 
+to common page structure analysis or include special features we are 
+interested in measuring.
 
-- Synthetic content / Self built test pages (plain html, small html file with many scripts/css, big html, etc ...)
-
-
-Measuring the page load times of real-world web pages (mirrored on special web server under our control. Mirroring is necessary for multiple reasons: First, to ensure repeatability of the results we don't want the load of the ``real'' web server and the network connection in between to compromise our measurement. Second, we need the web server to support HTTP/2, which is not too common, and MPTCP, which is extremely rare in the wild)
-
-- Alexa Top Sites (or similar ranking)
-
-- Hand-selected sites with interesting features / problems / optimization potentials
-
-- Sites which are often used on mobile
-
-\todo{stichworte -> text}
+What we did for our evaluations is use several popular web sites, chosen so 
+that we have a very heterogeneous structure. Instead of building synthetic 
+content, we modified some of these sites according to our needs. All sites 
+were also mirrored on a special web server under our control. Mirroring is 
+necessary for multiple reasons: First, to ensure repeatability of the results 
+we don't want the load of the ``real'' web server and the network connection 
+in between to compromise our measurement. Second, we need the web server to 
+support HTTP/2, which is not too common yet, and MPTCP with our custom 
+schedulers, which is obviously doesn't exist in the wild.
 
 
 \section{Preparation of Real-World Web Pages}
@@ -2000,15 +2064,19 @@ static int netem_enqueue(struct sk_buff *skb, struct Qdisc *sch)
 
 \subsection{Real World Measurements}
 
-To confirm the measurements we conducted in Mininet, we ran the same software on real hardware and real networks. For the server side, we used a virtual machine located in the Frankfurt data center of Amazon Web Services and another one in the Roubaix data center of OVH. As clients, we used notebooks connected to the internet via Wi-Fi and DSL, via a Wi-Fi hotspot with VPN tunneling, and via USB to a mobile phone with an LTE connection.\footnote{We were unable to use the university's internet connection directly as its Firewall blocks Multipath TCP connections.}
+To confirm the measurements we conducted in Mininet, we ran the same software on real hardware and real networks. For the server side, we used a virtual machines located in the Frankfurt data center of Amazon Web Services and in the Roubaix data center of OVH. As clients, we used notebooks connected to the internet via Wi-Fi and DSL, via a Wi-Fi hotspot with VPN tunneling, and via USB to a mobile phone with an LTE connection.\footnote{We were unable to use the university's internet connection directly as its Firewall blocks Multipath TCP connections.}
 
 \todo{more details about the measurement setup?}
 
 
 
+
+\clearpage
+
 \section{Evaluations}
 
-
+In this section we present the setup and results of three evaluations we conducted 
+with schedulers which use application-provided hints.
 
 \subsection{Evaluation A (``Bad Wi-Fi'')}
 % zeigen - implementiertung funktioniert grundsätzlich
@@ -2039,8 +2107,8 @@ paths.
 The web pages we used are an unmodified article from CNN, and the original 
 and a modified version of the English wikipedia home page. They consist of an 
 HTML document referencing style sheet, script and images of different size. 
-On the Wikipedia page, all styles and scripts are included in the \code{<head>
-} of the document and required for rendering the page. In the modified 
+On the Wikipedia page, all styles and scripts are included in the \code{<head>}
+of the document and required for rendering the page. In the modified 
 version, we included two big images below the fold that are not required for 
 the rendering.
 
@@ -2066,9 +2134,7 @@ available subflows the one with the lowest round-trip time.
 %sudo python2 execute.py --congestion_control cubic --network badWifiHotspot -a http2 --scheduler 'min_rtt_ctype_aware.txt min_rtt_advanced.txt'
 %badwifi.ipynb
 
-\begin{lstlisting}[style=RBS,label=lst:sched_eval_a,caption={RBS Scheduler Script for Evaluation A (``Slow Wi-Fi'')},numbers=left]
 
-\end{lstlisting}
 
 
 For comparison we use two reference schedulers, one that is single path TCP 
@@ -2092,16 +2158,16 @@ in figure \ref{eva1-rxbytes} and the speed up of the first meaningful
 paint event is from 4.5 to 2.8 seconds.
 
 \begin{figure}
-\centering
+\begin{center}
 	\includegraphics[width=0.9\textwidth]{eva1-rxbytes.pdf}
 	\caption{Received bytes per interface for Evaluation A }
 	\label{eva1-rxbytes}
-\end{figure}
-\begin{figure}
-\centering
+\end{center}
+\begin{center}
 	\includegraphics[width=0.9\textwidth]{eva1-loadtimes-stacked.pdf}
 	\caption{Mean page load times for Evaluation A }
 	\label{eva1-loadtimes}
+\end{center}
 \end{figure}
 
 
@@ -2129,20 +2195,168 @@ paint event is from 4.5 to 2.8 seconds.
 
 
 
-\subsection{Evaluation B (``Real World'') (TODO!)}
+\subsection{Evaluation B (``Real World'')}
 
 
+% subflow attributes
+\begin{table}
+	\begin{tabularx}{\linewidth}{ l r r r r r } \toprule
+	Connection & Packet Loss & Min RTT & Mean RTT & Max RTT & Mdev \\ \midrule
+
+	wifi &	10\%  &  105ms & 148ms  &  398ms &  27ms \\
+	lte	 &	0\%	  &  25ms  &  97ms  &  634ms &  95ms \\
+
+	\bottomrule
+	\end{tabularx}
+	\caption{Network characteristics for Evaluation B}
+	\label{tab:eva2-net-ping}
+\end{table}
+
+
+
+To try our implementation in a real network, we set up a network environment 
+as described in Figure \ref{eva1-scenario}. Instead of a smart phone, we used 
+a notebook running Ubuntu Linux with the custom RBS kernel. It has two 
+independent internet uplinks: an LTE connection, using USB tethering over an 
+Android phone connected to Telefonica network in Darmstadt, Germany; and a 
+connection via a free Wi-Fi hotspot of the Freifunk project\footnote{\url{https://darmstadt.freifunk.net}}, 
+which tunnels all traffic through a VPN 
+tunnel and is connected over a residential VDSL connection. The VDSL 
+connection has an average RTT of 100ms, when going through the hotspot VPN, 
+RTT rises to 150ms. The LTE connections RTT varies widely, but can go down to 
+30ms, with an average of 80ms.
+The server is a virtual machine in a data center in Roubaix, France and runs 
+Debian Linux with the same kernel as the notebook. 
+In section \ref{relwork-mptcp-performance} we learned that LTE RTTs vary 
+widely, this was confirmed by our ping tests as visible in Table \ref{tab:eva2-net-ping}. 
+Therefore we need to average our results over a larger number of 
+measurements, which is why we did fewer variations than before. We use the 
+same set of schedulers as described in Evaluation A, but load only the 
+modified wikipedia homepage, as the LTE data volume we have available for 
+testing is limited. 
+The results of the real-world measurements generally confirmed the findings 
+of Evaluation A.
+After removing 12 failed page loads, we have 120 page loads left, in table 
+\ref{eva2-results-tab} they are grouped by scheduler and the mean is 
+therefore calculated over 40 records each. The averaged first meaningful 
+paint and page load times are presented in Figure \ref{eva2-loadtimes-stacked}.
+
+
+\begin{figure}
+\centering
+\begin{subfigure}{.5\textwidth}
+\centering
+	\includegraphics[width=\textwidth]{eva2-rxbytes.pdf}
+	\caption{Received bytes per interface for Evaluation B }
+	\label{eva2-rxbytes}
+\end{subfigure}%
+\begin{subfigure}{.5\textwidth}
+\centering
+	\includegraphics[width=\textwidth]{eva2-loadtimes-stacked.pdf}
+	\caption{Mean page load times for Evaluation B }
+	\label{eva2-loadtimes-stacked}
+\end{subfigure}
+\caption{Evaluation B}
+\label{fig:eva2}
+\end{figure}
+
+
+
+
+% subflow attributes
+\begin{table}
+	\begin{tabularx}{\linewidth}{ l r r r r r } \toprule
+Scheduler & Wi-Fi Data    &  LTE Data   &  DOM Content Loaded  &    First Meaningful Paint   &   Page Load Time \\ \midrule
+      
+  content-aware   &    1737.2 kB   &  740.7 kB  &   2.2 s &     2.2 s &    14.7 s   \\
+  min. RTT     &   474.6 kB  &   1655.5 kB &    2.4 s   &  2.3 s    & 6.5 s \\   
+  single path   &    1996.3 kB  &   1.5 kB  &   4.9 s   &  4.9 s   &  20.1 s  \\
+
+
+	\bottomrule
+	\end{tabularx}
+	\caption{Aggregated measurement results for Evaluation B}
+	\label{tab:eva2-net-ping}
+\end{table}
+
+
+Furthermore, we want to check whether the ratio of Wi-Fi and LTE RTT affects 
+the results. So we add additional delays on the Wi-Fi channel. We compare the 
+behaviour with 0ms, 8ms, 20ms and 85ms added one-way delay. We assume that, 
+at least for the min. RTT scheduler, there should be a correlation of the RTT 
+ratio and the amount of data offloaded to the 3G network, as offloading gets 
+more ``attractive'' with higher Wi-Fi latency.
+After running 10 page loads with each delay, however, we couldn't find such 
+correlation with either scheduler. In Figure \ref{eva2-scat-rttRatio-dataRatio}
+the fraction of data transmitted via LTE is plotted over the changing RTT 
+ratio.
+When comparing Figure \ref{eva2-scat-rttRatio-firstMfPaint} and 
+\ref{eva2-scat-rttRatio-loadEvent} we can see that the RTT ratio correlates
+to paint and load timings in different ways for the three schedulers.
+For single path operation, both get slower with rising RTT ratio, as the 
+rising ratio means the Wi-Fi path gets slower (LTE stays roughly the same all 
+the time).
+The min. RTT scheduler just sends data over 3G when the Wi-Fi latency gets too
+high, so the timings are don't change with the RTT ratio.
+More interesting is the behaviour of the content-type aware scheduler, which is
+not affected by RTT ratio in the First Meaningful Paint timing, as it behaves
+like the min. RTT scheduler for the high priority data. But the Page Load Time
+is affected, as the tail data can only be transmitted over the ``cheap'' Wi-Fi 
+subflow.
+
+
+\begin{figure}
+\centering
+	\includegraphics[width=0.7\textwidth]{eva2-scat-rttRatio-dataRatio.pdf}
+	\caption{xxx for Evaluation B }
+	\label{eva2-scat-rttRatio-dataRatio}
+\end{figure}
+
+
+\begin{figure}
+\centering
+\begin{subfigure}{.5\textwidth}
+\centering
+	\includegraphics[width=\textwidth]{eva2-scat-rttRatio-firstMfPaint.pdf}
+	\caption{First Meaningful Paint}
+	\label{eva2-scat-rttRatio-firstMfPaint}
+\end{subfigure}%
+\begin{subfigure}{.5\textwidth}
+\centering
+	\includegraphics[width=\textwidth]{eva2-scat-rttRatio-loadEvent.pdf}
+	\caption{Page Load Time}
+	\label{eva2-scat-rttRatio-loadEvent}
+\end{subfigure}
+\caption{Page timings changing with RTT ratio}
+\label{fig:test}
+\end{figure}
+
+
+
+
+
+
+
+
+
+%wifi hotspot
+%lte network of Telefonica in Darmstadt, Germany
+%average LTE RTT of 60ms, Wifi of 140ms (?)
+
+
+%However, as LTE has huge variation in RTT \textcite{Chen2013}, the bandwidth usage improvement of the content-aware scheduler in comparison to the minimal RTT scheduler are smaller in our real world evaluation.
+
+
+\clearpage
 
 \subsection{Evaluation C (``Both lossy'') (TODO!)}
 
-We simulated a network with a similar scenario as Evaluation A, but now the 
+We simulate a network with a similar scenario as Evaluation A, but now the 
 Wi-Fi is faster than the LTE network in latency and bandwidth, but has a higher 
 packet loss rate of 3\%. 
 According to \textcite{Chen2013}, Wi-Fi has average loss rates from 1\% to 3\%,
 while for LTE it is below 0.1\%. They also measured 30ms as average RTT for 
 Wi-Fi, and at least 60ms for LTE, which we used for the simulation.
-
-
 
 We build an optimized scheduler for browsing the web in situations where multiple network 
 connections are available, but they are all lossy. 
@@ -2157,14 +2371,18 @@ as latency critical.
 As reference schedulers we used the same minimum round-trip time scheduler as in Evaluation A,
 and additionally a scheduler which sends all segments redundantly regardless of content type.
 
-While simulating lossy networks, we noticed that for randomly distributed loss, the results can vary widely between page loads, depending on when during the connection the packet loss occurs. This can be offset by repeating many times and averaging the results. For the results presented below, we loaded the page 100 times with every scheduler.
+While simulating lossy networks, we noticed that for randomly distributed 
+loss, the results can vary widely between page loads, depending on when 
+during the connection the packet loss occurs. This can be offset by repeating 
+many times and averaging the results. For the results presented below, we 
+loaded the page 100 times with every scheduler.
 The packet loss on both paths was set to 5 percent.
 
 
 \todo{doesn't work?  ...what might be the reasons}
 
 
-\subsection{Evaluation D (``Lossy Wi-Fi'') (TODO!)}
+%\subsection{Evaluation D (``Lossy Wi-Fi'') (TODO!)}
 
 
 
@@ -2197,6 +2415,11 @@ The packet loss on both paths was set to 5 percent.
 %=====================================================================
 
 \todo{conclusion}
+
+% multipath scheduling can profit from hints from the application 
+% we found an exemplary network situation where the benefit is evident, as a performance improvement can be shown while minimizing additional bandwidth costs
+% 
+
 
 \section{Outlook / Future Work}
 
