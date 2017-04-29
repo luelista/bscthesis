@@ -1,4 +1,5 @@
-\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud0a]{tudthesis}
+\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud1b,twoside]{tudthesis}
+%
 
 %--------------------------------------------------------
 % shows reference keys
@@ -29,7 +30,7 @@
 \usepackage{wrapfig}
 \usepackage{float}
 
-\usepackage[bibencoding=utf8]{biblatex}
+\usepackage[bibencoding=utf8,style=alphabetic,sorting=anyt]{biblatex}
 %\usepackage{parskip}
 
 % new page for each section
@@ -392,7 +393,7 @@ as ``Middleboxes routinely interpose on the transport layer''.
 These compatibility is considered important to allow deploying it in the 
 current Internet landscape.
 
-The ```application-oriented' Semantic layer'' of Multipath TCP provides ``
+The ``\thinspace`application-oriented' Semantic layer'' of Multipath TCP provides ``
 application compatibility through the preservation of TCP-like semantics of 
 global ordering of application data and reliability''. Combined with a 
 backward compatible API this allows ``that existing applications can use the 
@@ -473,7 +474,7 @@ The current reference implementation\footnote{\url{http://multipath-tcp.org/}} i
 %https://support.apple.com/en-us/HT201373
 The first implementation of Multipath TCP was written as a user-space proxy\footnote{\url{https://open-innovation.alcatel-lucent.com/projects/mptcp-proxy}} by Hampel at Bell Labs, and is no longer maintained.  
 %other implementations
-The most widely deployed implementation is found in Apple's XNU kernel\footnote{\url{https://opensource.apple.com/source/xnu/xnu-2422.1.72/bsd/netinet/mptcp.c.auto.html}} \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the Siri personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \cite{AppleSupportMPTCP}. 
+The most widely deployed implementation is found in Apple's XNU kernel\footnote{\url{https://opensource.apple.com/source/xnu/xnu-2422.1.72/bsd/netinet/mptcp.c.auto.html}} \cite{Hesmans2016}, used in the macOS and iOS operating systems. It is used mainly for the Siri personal assistant software, which keeps a backup connection over cellular network in case the Wi-Fi connection breaks down \footnote{\url{https://support.apple.com/en-us/HT201373}}. 
 All aforementioned implementations are open source. There is also one known closed-source implementation by Citrix Networks in their load balancer firmware \cite{Eardley2013}.
 
 % multiple network interfaces
@@ -1773,7 +1774,7 @@ unacknowledged packets on all subflows they haven't been sent on. This could
 speed up the ``tail'' of a connection, i.e. the last missing packets for 
 displaying a web page. 
 
-\begin{lstlisting}[style=RBS,label=lst:ctype-based-redundancy,caption={
+\begin{lstlisting}[style=RBS,label=lst:retrans-if-q-empty,caption={
 Retransmitting unacknowledged packets if send queues are empty}]
 VAR applicationQueuesEmpty = R1;
 IF (Q.EMPTY && applicationQueuesEmpty == 1) {
