@@ -19,16 +19,10 @@ def pinghost(ping_hostname, intf = None):
     """
     if len(ping_hostname) == 0: return ""
     # 4 pings should be sufficient to get meaningful results
-    if intf is None:
-        out = check_output(['ping', '-c', '4', '-i', '0.4', ping_hostname])
-    else:
-        out = check_output(['ping', '-c', '4', '-i', '0.4', ping_hostname, '-I', intf])
-
+    out = check_output(['ping', '-c', '4', '-i', '0.4', ping_hostname] + ['-I', intf] if intf else [])
     s = out.strip().split("\n")
-
     pkg=re.match("(\d+) packets transmitted, (\d+) received, ([.\d]+)% packet loss, time (\d+)ms", s[-2])
     rtt=re.match("rtt min/avg/max/mdev = ([.\d]+)/([.\d]+)/([.\d]+)/([.\d]+) ms", s[-1])
-
     return {'pkg_tx': pkg.group(1),'pkg_tx': pkg.group(2),'loss': pkg.group(3),'time': pkg.group(4),
      'rtt_min': rtt.group(1), 'rtt_avg': rtt.group(2), 'rtt_max': rtt.group(3), 'rtt_mdev': rtt.group(4) }
 
@@ -57,16 +51,13 @@ def connect_to_chrome():
     """
     print "Waiting for chrome to be ready ",
     for i in range(100):
-        print ".",
-        sys.stdout.flush()
+        print ".", ; sys.stdout.flush()
         try:
             # create debugging api client instance
             s = Shell(host='127.0.0.1', port=9876)
             for i, tab in enumerate(s.tablist):
                 if tab['type'] == 'page':
-                    # connect to the debugging api
-                    s.connect(i, False)
-                    print "connected"
+                    s.connect(i, False); print "connected"
                     return s
         except Exception, e:
             time.sleep(0.1)
@@ -87,10 +78,8 @@ def do_page_load(s, the_url, intf, intf2, timeout=30, verbose=0, extralogfield="
     # the output dictionary, everything is collected in here
     QQ = OrderedDict()
 
-    print ""
-    print "URL: "+the_url
-    QQ['url'] = the_url
-    QQ['extraData'] = extralogfield
+    print "\nURL: "+the_url
+    QQ['url'] = the_url; QQ['extraData'] = extralogfield
 
     s.do("Page.stopLoading")
 
@@ -116,22 +105,14 @@ def do_page_load(s, the_url, intf, intf2, timeout=30, verbose=0, extralogfield="
     s.do("Page.navigate", url=the_url)
 
     method = ""
+    starttime=99999999; endtime=0
+    domReadyEventTime=0; loadEventTime=0
+    QQ['beforeDomReadySize']=0; QQ['beforeLoadSize']=0; overallSize=0
 
-    starttime=99999999
-    endtime=0
-    domReadyEventTime=0
-    loadEventTime=0
-    QQ['beforeDomReadySize']=0
-    QQ['beforeLoadSize']=0
-    overallSize=0
-
-    requestsPerHost=Counter()
-    bytesPerHost=defaultdict(float)
+    requestsPerHost=Counter(); bytesPerHost=defaultdict(float)
     bytesBeforeDomReadyPerHost=defaultdict(float)
-    requestUrls = dict()
-    requestDataTypes=dict()
-    requestsPerDataType=Counter()
-    bytesPerDataType=defaultdict(float)
+    requestUrls = dict(); requestDataTypes=dict()
+    requestsPerDataType=Counter(); bytesPerDataType=defaultdict(float)
     bytesBeforeDomReadyPerDataType=defaultdict(float)
     trackedLoads = dict()
 
@@ -174,17 +155,11 @@ def do_page_load(s, the_url, intf, intf2, timeout=30, verbose=0, extralogfield="
             else:
                 hostname = 'unknown'
             if domReadyEventTime==0: bytesBeforeDomReadyPerHost[hostname] += size
-            requestsPerHost[hostname] += 1
-            bytesPerHost[hostname] += size
+            requestsPerHost[hostname] += 1; bytesPerHost[hostname] += size
 
             dataType = requestDataTypes.get(params['requestId'], 'Other')
             if domReadyEventTime==0: bytesBeforeDomReadyPerDataType[dataType] += size
-            requestsPerDataType[dataType] += 1
-            bytesPerDataType[dataType] += size
-
-        if verbose > 2:
-            # dump all the data
-            print(params)
+            requestsPerDataType[dataType] += 1; bytesPerDataType[dataType] += size
 
     # fetch tracing data
     tracingData = s.collect_tracing_data()
@@ -212,7 +187,6 @@ def do_page_load(s, the_url, intf, intf2, timeout=30, verbose=0, extralogfield="
 
     print "before DOMContentReady: "+str(QQ['beforeDomReadySize']/1024)+"k"
     print "before Load: "+str(QQ['beforeLoadSize']/1024)+"k"
-
     print "#req\txferAll     \txferReady\torigin"
     QQ['origins'] = dict()
     for hostname in requestsPerHost.keys():
@@ -250,23 +224,19 @@ def do_page_load(s, the_url, intf, intf2, timeout=30, verbose=0, extralogfield="
 FIELD_NAMES = [ "url", "extraData", "requestCount", "originCount", 
         "firstPaint", "firstContentfulPaint", "firstMeaningfulPaint", 
         "domContentLoadedEventStart", "loadEventStart", "beforeDomReadySize", "beforeLoadSize", 
-
         "DocumentRequests", "ScriptRequests", "StylesheetRequests", "FontRequests",
         "ImageRequests", "XHRRequests", "OtherRequests", 
-
         "DocumentBeforeDomReadySize", "ScriptBeforeDomReadySize", "StylesheetBeforeDomReadySize", 
         "FontBeforeDomReadySize", "ImageBeforeDomReadySize", "XHRBeforeDomReadySize", 
         "OtherBeforeDomReadySize", 
-
         "DocumentBeforeLoadSize", "ScriptBeforeLoadSize", "StylesheetBeforeLoadSize", 
         "FontBeforeLoadSize", "ImageBeforeLoadSize", "XHRBeforeLoadSize", "OtherBeforeLoadSize"
 ]
 
-
 if __name__ == '__main__':
     # Handle command line arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument("-v", "--verbose", help="stores all possible meta data during the application execution", action="count", default=0)
+    parser.add_argument("-v", "--verbose", help="print more meta data", action="count", default=0)
     parser.add_argument("-e", "--extra", help="this is passed through to the logfile", default="-")
     parser.add_argument("-t", "--timeout", help="maximum time in seconds", default="-")
     parser.add_argument("-i", "--intf", help="name of the first intf", default="eth0")
@@ -276,17 +246,13 @@ if __name__ == '__main__':
     parser.add_argument('urls', metavar='URL', type=str, nargs='+',
                         help='an URL to load')
     opt = parser.parse_args()
-    urls=opt.urls
+    urls=opt.urls; intf2 = opt.intf2; intf = opt.intf
 
     # Open a CSV logfile and a JSON logfile
     logfilespec=opt.logfile
     do_header = not os.path.isfile(logfilespec)
     logfile=open(logfilespec,"a")
     logfile_json=open(logfilespec+'.json',"a")
-
-    intf2 = opt.intf2
-    intf = opt.intf
-
     out = csv.DictWriter(logfile, FIELD_NAMES, restval='-', extrasaction='ignore')
     if do_header:
         # Write the header only if the file was just created
@@ -297,25 +263,20 @@ if __name__ == '__main__':
     s = connect_to_chrome()
     time.sleep(1.5)
 
-    # Enable receiving Page related events (esp. onLoad event)
-    s.do("Page.enable")
-
-    # Enable receiving Network profiling events
-    s.do("Network.enable")
+    # Enable receiving Page related and Network profiling events
+    s.do("Page.enable"); s.do("Network.enable")
 
     # Load all pages which were specified as command line args
     for url in urls:
         s.do("Page.stopLoading")
-        results=do_page_load(s, url, intf, intf2, timeout=opt.timeout, verbose=opt.verbose, extralogfield=opt.extra)
+        results=do_page_load(s, url, intf, intf2, opt.timeout, opt.verbose, opt.extra)
         # Write the results to CSV and JSON log file
         out.writerow(results)
         logfile_json.write(json.dumps(results)+'\n')
-        s.do("Page.stopLoading")
-        time.sleep(1.2)
+        s.do("Page.stopLoading"); time.sleep(1.2)
 
     # close debugging API connection
     s.close()
-
     # close browser
     time.sleep(0.1)
     if opt.verbose > 0: print("sending KILL signal")
@@ -323,6 +284,4 @@ if __name__ == '__main__':
 
     # delete the temporary profile folder to ensure "clean slate" for next run
     check_output(['rm', '-r', '/tmp/chrome-profiling'])
-
-    logfile.close()
-    logfile_json.close()
+    logfile.close(); logfile_json.close()

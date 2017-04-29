@@ -1,5 +1,5 @@
-\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud1b,twoside]{tudthesis}
-%
+\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud0b,twoside]{tudthesis}
+%tud1b is das KOM-blau
 
 %--------------------------------------------------------
 % shows reference keys
@@ -922,7 +922,7 @@ They also introduce the \code{tcpdump-mpw} tool, which is used to analyze the cr
 
 \textcite{Raisinghani_2004} elaborate the various ways of providing feedback 
 across protocol layers. They say that the ``application layer can communicate 
-to other layers the application’s QoS needs, i.e. the delay tolerance, 
+to other layers the application's QoS needs, i.e. the delay tolerance, 
 acceptable delay variation, required throughput and acceptable packet loss 
 rate''. In detail, they list devices with multiple network interfaces as
 a potential application field for cross-layer feedback, because ``a wireless 
@@ -1490,7 +1490,7 @@ based on the file extension, as well as a query string parser. The query
 parameter \code{rbs_content_type} allows overriding the automatically 
 assigned file type. Finally, the response is enqueued in Libnghttp's internal 
 buffer of outbound items by calling \code{nghttp2_submit_response}. The 
-modifications are reproduced in Annex B.
+modifications are reproduced in Annex \ref{annex-prepare_response}.
 
 \subsection{Retrieving and Buffering Meta Information} \label{nghttpd-retr-meta-inf}
 
@@ -1681,7 +1681,7 @@ Constants defining valid metadata indizes (from \code{mptcp_rbs.h})}]
 
 The scheduler hints can be augmented by the following parameters in the URL 
 query string (``GET parameters''). The code parsing these parameters can be 
-found in Annex B.
+found in Annex \ref{annex-prepare_response}.
 
 When we use existing web pages for measurements, the content types of requests often can't be determined by the file extension. Therefore, we implemented the the \code{rbs_content_type} parameter which we can add to the URLs in the code of the downloaded web page to override
 the content type which is used as a scheduler hint. Valid types can be found 
@@ -1816,8 +1816,7 @@ and packet drops can occur on any middlebox along the route.  Therefore, we
 need to record them in an automated way, which is possible by directly 
 connecting to the API the developer tools use internally, the Chrome 
 Debugging Protocol\footnote{\url{https://developer.chrome.com/devtools/docs/debugger-protocol}}.
-We built the Python script \code{measure_web_requests.py} (reproduced in 
-Annex \ref{annex-measure_web_requests}) to 
+We built the Python script \code{measure_web_requests.py} to 
 instrument the web browser to navigate to pages we want to measure, and to 
 retrieve the network and tracing data.
 
@@ -2172,7 +2171,7 @@ of the document and required for rendering the page. In the modified
 version, we included two big images below the fold that are not required for 
 the rendering.
 
-A scheduler script was designed to send the images only over the ``cheap'' Wi-Fi
+The scheduler script, which is listed in Annex B, was designed to send the images only over the ``cheap'' Wi-Fi
 subflow, and allow the other, more time-critical data, to choose from the 
 available subflows the one with the lowest round-trip time.
 For comparison we use two reference schedulers, one that is single path TCP 
@@ -2458,7 +2457,7 @@ end latency'' \cite{Frommgen2016a}.
 To conserve bandwidth, we only do redundant transmissions for 
 latency critical data. For non-critical data, we transmit only on the fastest available
 subflow. This content-aware scheduler is equivalent to switching between min. RTT and
-redundant scheduler based on the content type.
+redundant scheduler based on the content type. Its source code is reproduced in Annex C.
 The application provides scheduling hints to help the scheduler decide whether the 
 data is latency critical or not. We used the content type again as 
 scheduling hints, and declared connection setup, main document, scripts and stylesheets
@@ -2625,11 +2624,11 @@ Finally, to use the optimizations in a real-world scenario, it is necessary to p
 
 \begin{appendices}
 
-\chapter{Web Request Measurement Script}\label{annex-measure_web_requests}
+%\chapter{Web Request Measurement Script}\label{annex-measure_web_requests}
 
-\lstinputlisting[language=Python,caption={
-\code{measure_web_requests.py}
-}]{measure_web_requests.py}
+%\lstinputlisting[language=Python,caption={
+%\code{measure_web_requests.py}
+%}]{measure_web_requests.py}
 
 
 \chapter{Content Type Detection Code}\label{annex-prepare_response}
@@ -2637,38 +2636,23 @@ Finally, to use the optimizations in a real-world scenario, it is necessary to p
 \begin{lstlisting}[style=C_Code,caption={
 \code{HttpServer.cc}, function \code{prepare_response}
 }]
-void prepare_response(Stream *stream, Http2Handler *hd,
-                      bool allow_push = true) {
+void prepare_response(Stream *stream, Http2Handler *hd, bool allow_push = true) {
   [...]
-
-  StringRef raw_path, raw_query;
   auto query_pos = std::find(std::begin(reqpath), std::end(reqpath), '?');
   if (query_pos != std::end(reqpath)) {
-    // Do not response to this request to allow clients to test timeouts.
-    if (util::streq_l("nghttpd_do_not_respond_to_req=yes",
-                      StringRef{query_pos, std::end(reqpath)})) {
-      return;
-    }
+    [...]
     const char* pos=(char*)query_pos;
     while(*pos!='\0') {
-      if (*pos != '&' && *pos != '?') break;
-      pos++;
+      if (*pos != '&' && *pos != '?') break;        pos++;
       // set multipath tcp scheduler register
-      //printf("query string parser: '%s'\n", pos);
-      if (strncmp("rbs_set_R",pos,9)==0) {
-        pos+=9;
+      if (strncmp("rbs_set_R",pos,9)==0) {          pos+=9;
         int regnum = strtol(pos, (char**)&pos, 10);
-        //printf("query string parser 2: '%s'\n", pos);
-        if (*pos != '=') break;
-        pos++;
+        if (*pos != '=') break;                     pos++;
         int regval = strtol(pos, (char**)&pos, 0);
         if (regnum < 1 || regnum > 6) break;
-        //printf("setting R%d = %d from query param\n", regnum, regval);
         hd->set_rbs_register(regnum, regval);
-      } else if (strncmp("rbs_user=",pos,9)==0) {
-        pos+=9;
+      } else if (strncmp("rbs_user=",pos,9)==0) {   pos+=9;
         int regval = strtol(pos, (char**)&pos, 0);
-        //printf("setting user value for stream #%d = %d from query param\n", stream->stream_id, regval);
         stream->priority_file_type = regval;
       }
     }
@@ -2677,12 +2661,9 @@ void prepare_response(Stream *stream, Http2Handler *hd,
   } else {
     raw_path = reqpath;
   }
-
   [...]
-
   auto ext = file_path.c_str() + file_path.size() - 1;
-  for (; file_path.c_str() < ext && *ext != '.' && *ext != '/'; --ext)
-    ;
+  for (; file_path.c_str() < ext && *ext != '.' && *ext != '/'; --ext) ;
   if (*ext == '.') {
     ++ext;
     // only set content type if it was not overwritten by GET parameter earlier in this function
@@ -2699,17 +2680,9 @@ void prepare_response(Stream *stream, Http2Handler *hd,
       } else {
         stream->priority_file_type = SKB_CONTENT_OTHER;
       }
-      printf("FILE EXT '%s' ", ext);
-    } else 
-        printf("FILE from para");
-
-  } else 
-      printf("FILE no ext  ");
-
-  printf(" -> TYPE %s   '%s' \n", SKB_CONTENT_TYPES[stream->priority_file_type], file_path.c_str());
-
+    }
+  }
   [...]
-
   hd->submit_file_response(StringRef::from_lit("200"), stream, file_ent->mtime,
                            file_ent->length, file_ent->content_type, &data_prd);
 }
@@ -2762,7 +2735,7 @@ IF (!Q.EMPTY) {
 
 \chapter{Content-Based Redundant Scheduler}\label{annex-sched_eval_b}
 
-\begin{lstlisting}[style=RBS,label=lst:sched_eval_b,caption={RBS Scheduler Script for Evaluation A (``Bad Wi-Fi'')},numbers=left]
+\begin{lstlisting}[style=RBS,label=lst:sched_eval_b,caption={RBS Scheduler Script for Evaluation C (``Lossy Wi-Fi'')},numbers=left]
 /*
  * send packets redundant if skb user property is set
 */
