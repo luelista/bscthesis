@@ -1,5 +1,7 @@
-\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud0b,twoside]{tudthesis}
-%tud1b is das KOM-blau
+\documentclass[bigchapter,type=bsc,colorback,accentcolor=tud1b]{tudthesis}
+%tud1b ist das KOM-blau
+%tud0b ist das grau aus der vorlage
+%,twoside
 
 %--------------------------------------------------------
 % shows reference keys
@@ -188,17 +190,19 @@
 \makethesistitle
 \affidavit{M. Weller}
 
-
+\pdfbookmark[0]{Abstract}{Abstract}
 %=====================================================================
 \begin{abstract}
 %=====================================================================
 
-Multipath TCP is an extension to the Transmission Control Protocol (TCP) to support the use of multiple paths between hosts with multiple interfaces. It is backwards compatible to TCP, not only on the wire, but also towards the application layer. With the current reference implementation, applications do not have to be aware of Multipath TCP, but also can't influence the scheduling decisions. An implementation of Multipath TCP must decide for each data segment over which path it should be sent. This decision can be based on different criteria and algorithms, making a trade-off between throughput, resource utilization, reliability and latency.
+Multipath TCP is an extension to the Transmission Control Protocol (TCP) to support the use of multiple paths between hosts with multiple interfaces. It is backwards compatible to TCP, not only on the wire, but also towards the application layer. With the current reference implementation, applications do not have to be aware of Multipath TCP, but can't influence the scheduling decisions either. An implementation of Multipath TCP must decide for each data segment which path it should be sent over. This decision can be based on different criteria and algorithms, making a trade-off between throughput, resource utilization, reliability and latency.
  %\cite{RFC6182}
 
 We show that hints from the application can improve scheduling performance. We enable the application to select and modify the scheduling algorithm based on its internal information about content types, priorities, dependencies and user expectations.
 For this purpose, we modify an HTTP/2 web server to pass scheduling hints to the Multipath TCP scheduler via socket options. The scheduling algorithms are developed in the RBS scripting language for easier evaluation.
-An evaluation is performed in simulated and real-world environments over LTE and Wi-Fi, demonstrating that better trade-offs between (perceived) speed and network load can be achieved by utilizing the additional information. We show speed-ups of 50\% compared to single path TCP with only 44\% of the bandwidth overhead of a comparable, not content-type aware scheduler.
+An evaluation is performed in simulated and real-world environments over LTE and Wi-Fi, demonstrating that better trade-offs between (perceived) speed and network load can be achieved by utilizing the additional information. 
+We show speed-ups of 50\% compared to single path TCP by offloading segments to a faster, but more expensive subflow. 
+To achieve this, only 34\% of the data needs to be transmitted on the more expensive subflow with the content-aware scheduler, instead of 75\% with the non-content-aware reference scheduler.
 
 
 \end{abstract}
@@ -240,7 +244,7 @@ In the following paragraphs, we describe the motivation for the recently updated
 
 
 % reasoning why mptcp is/will be used on devices people browse the internet with
-Most smart phones and notebooks have multiple network interfaces nowadays. This has given rise to the design of various network protocols with the aim of extending bandwidth, enhancing reliability and lowering power consumption by intelligently combining interfaces. One of these is Multipath TCP  \cite{RFC6824_MPTCP}, an extension to the Transmission Control Protocol with support for combining multiple paths over multiple interfaces into a single TCP connection with higher bandwidth and reliability.
+Most smartphones and notebooks have multiple network interfaces nowadays. This has given rise to the design of various network protocols with the aim of extending bandwidth, enhancing reliability and lowering power consumption by intelligently combining interfaces. One of these is Multipath TCP  \cite{RFC6824_MPTCP}, an extension to the Transmission Control Protocol with support for combining multiple paths over multiple interfaces into a single TCP connection with higher bandwidth and reliability.
 
 
 % users expect faster/instant reaction from computers/web pages/interactive services ^= do not accept (long) wait times
@@ -252,12 +256,12 @@ Most smart phones and notebooks have multiple network interfaces nowadays. This 
 
 
 
-Inherent in Multipath TCP operation is some overhead of discovering and establishing multiple paths when the connection is set up. In regular web browsing, HTTP up to version 1.1 use many short-lived TCP connections, so the overhead of multipath initialization can shatter the performance improvements of Multipath TCP, as the connection often is closed before the second path is usable. Combined with unadapted browsers, this can cause Multipath TCP to have worse performance than single path TCP \cite{han2015mwebmptcp}.
+Inherent in Multipath TCP operation is some overhead of discovering and establishing multiple paths when the connection is set up. In regular web browsing, HTTP up to version 1.1 use many short-lived TCP connections, so the overhead of multipath initialization can shatter the performance improvements of Multipath TCP, as the connection often is closed before the second path is usable. Combined with unadapted browsers, this can cause Multipath TCP to perform worse than single path TCP \cite{han2015mwebmptcp}.
 
 
 % very short intro to http/2, maybe difference to http/1(.1)
 % ``websites become more intricate''
-The web has come a long way since the introduction of HTTP/0.9 in 1993. Many small improvements have been made in the meantime, all carefully providing backward compatibility. But web applications have become so intricate, and users so accustomed to responsive interactive services, that a clear break had to be made. Therefore, HTTP/2 \cite{RFC7540_HTTP2} has been specified. To allow easier adaption, the semantics were kept intact, while the underlying protocol was changed completely: A only seemingly simple text-based protocol was replaced with a more efficient, precisely specified binary protocol. 
+The web has come a long way since the introduction of HTTP/0.9 in 1993. Many small improvements have been made in the meantime, all carefully providing backward compatibility. But web applications have become so intricate, and users so accustomed to responsive interactive services, that a clear break had to be made. Therefore, HTTP/2 \cite{RFC7540_HTTP2} has been specified. To allow easier adoption, the semantics were kept intact, while the underlying protocol was changed completely: An only seemingly simple text-based protocol was replaced with a more efficient and precisely specified binary protocol. 
 The new feature most relevant to us are multiplexed streams which allow all data to be transferred over few, long-lived, thus more efficient TCP connections. The multiplexing also prevents head-of-line blocking and allows prioritizing the most time-critical resources.
 
 % two schedulers (
@@ -272,9 +276,9 @@ As opposed to older versions, HTTP/2 is based on long-lived TCP connections. The
 
 % assumption: choosing best possible scheduling strategy depends on requirements of(/knowledge about/knowledge available to implementation of) higher level protocols 
 % even for one given protocol, these requirements can change during a connection (e.g. web site: initial loading should be fast - user is waiting - use fastest flow(s)/use redundancy, loading of images below the fold don't need to be as fast -> conserve power/metered traffic, ajax requests might be small, but latency critical -> redundancy)
-We assume that choosing the best possible Multipath TCP subflow scheduling strategy depends on information about the higher layers. In the case of HTTP/2 connections this information includes the type of the request as indicated above. For having this information available to the packet scheduler - part of the transport layer - there are several possible solutions, each coming with different pros and cons. 
+We assume that choosing the best possible Multipath TCP subflow scheduling strategy depends on information about the higher layers. In the case of HTTP/2 connections this information includes the type of the request as indicated above. For having this information available to the packet scheduler -- part of the transport layer -- there are several possible solutions, each coming with different pros and cons. 
 % for some protocols, a good heuristical approach can be chosen based on transmitted bytes, time, transmission pauses, etc
-For one, a heuristic approach can be chosen, which acts on metadata readily available in the transport layer, including transmission rate and pauses, elapsed time, and byte and packet counters. The good thing is that this approach is independent of the specific implementation of the application protocol, and can even work unchanged for several similar protocols. 
+For one, a heuristic approach can be chosen, which acts on metadata readily available in the transport layer, including transmission rate and pauses, elapsed time, and byte and packet counters. A positive aspect of this approach is its independency from the specific implementation of the application protocol, and that it can even work unchanged for several similar protocols. 
 % for some protocols, the scheduler could look into the octet stream and decide depending on contents
 % problems:
 % -> breaks separation of layers - high ``dirty hack'' factor
@@ -288,7 +292,7 @@ Even more information about the state of higher level protocols can be gained by
 % contra
 % - every application which should take advantage of this approach needs to be specifically modified
 % - 
-The middle road we suggest is providing an API which allows the application to provide scheduling hints to the transport layer. This has the advantage of not embedding knowledge about the application layer protocol in the scheduler, thereby keeping the abstraction layers separate.
+The middle course we suggest is providing an API which allows the application to provide scheduling hints to the transport layer. This has the advantage of not embedding knowledge about the application layer protocol in the scheduler, thereby keeping the abstraction layers separate.
 
 
 %---------------------------------------------------------------------
@@ -315,13 +319,13 @@ The next step is an evaluation of the implemented optimizations in simulated net
 % where we provide an overview of the chapters
 
 % background/rel. work
-In the following chapter, we introduce the protocols on which this work is based. This is Multipath TCP on the transport layer, which is described with a focus on scheduling. On the application layer, the HTTP/2 protocol and its underlying concepts. A review of related publications is conducted, with a focus on Multipath TCP scheduling, coordination among software layers, cooperation between kernel and user-space components, web page optimization, and performance measurement of web pages and applications.
+In the following chapter, we introduce the protocols on which this work is based. This is Multipath TCP on the transport layer, which is described with a focus on scheduling. On the application layer, it is the HTTP/2 protocol and its underlying concepts. A review of related publications is conducted, with a focus on Multipath TCP scheduling, coordination among software layers, cooperation between kernel and user-space components, web page optimization, and performance measurement of web pages and applications.
 
 %approach
-Chapter four starts with an analysis of typical web page structures, details our approach for passing scheduling hints from application to transport layer and presents optimized MPTCP scheduler rules for different network scenarios. We also consider security concerns regarding the scheduling hints as a side channel to TLS encryption.
+Chapter four starts with an analysis of typical web page structures, details our approach for passing scheduling hints from application to transport layer and presents MPTCP scheduler optimization strategies for different network scenarios. We also consider security concerns regarding the scheduling hints as a side channel to TLS encryption.
 
 %implementation
-Following our approach of integrating multiple layers, the implementation described in chapter five ranges from the transport layer up to the application layer. Optimized schedulers were realized with a scripting-enabled rule based scheduler in the Linux kernel. After conducting a survey of web server software, we choose one to customize. This is necessary to pass information about HTTP transactions down the stack, bypassing encryption. On top of that, we created sample web pages and applications.
+Following our approach of integrating multiple layers, the implementation described in chapter five ranges from the transport layer up to the application layer. Optimized schedulers are realized with a scripting-enabled rule-based scheduler in the Linux kernel. After conducting a survey of web server software, we choose one to customize. This is necessary to pass information about HTTP transactions down the stack, bypassing encryption. On top of that, we implement software to evaluate web page performance.
 
 
 %evaluation
@@ -331,7 +335,7 @@ To show which optimizations are worth using in which network situations, in chap
 %their actual and perceived speed, utility to the user, overall and per-interface bandwidth usage, (power usage?), computational overhead, implementation difficulty, 
 
 %conclusion
-Finally, a conclusion is drawn on the accomplished improvements, which approaches were successful and which less so. We also use the last chapter to point out possible future work.
+Finally, a conclusion is drawn on the accomplished improvements, which approaches were successful and which less so. The last chapter is also used to point out possible approaches for future investigations in this field.
 
 
 %problem statement
@@ -363,7 +367,7 @@ In this chapter, we go through transport, presentation and application layer, th
 %http://www.ip-insider.de/anwendungen-und-konkurrenz-fuer-multipath-tcp-a-445245/
 %
 
-Two pipes are better than one - that's Multipath TCP in a nutshell. In this case, a pipe is a distinct path between two devices, identified by the IP addresses of both peers. Combining multiple of these subflows can provide several advantages: Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow stops working, the backup takes over seamlessly. \cite{Raiciu:2011:IDP:2018436.2018467} On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows.
+Two pipes are better than one - that's Multipath TCP put in a nutshell. In this case, a pipe is a distinct path between two devices, identified by the IP addresses of both peers. Combining multiple of these subflows can provide several advantages: Higher throughput can be achieved by multiplexing data over multiple subflows. The reliability of a connection can be improved by establishing backup subflows: in case a subflow stops working, the backup takes over seamlessly. \cite{Raiciu:2011:IDP:2018436.2018467} On routes with packet loss, the latency can be reduced by sending packets redundantly on multiple subflows.
 
 This section covers the background knowledge on Multipath TCP which is required for the remaining work. We start by enumerating the current software implementations of Multipath TCP and giving some information on its current deployment. Following that, we describe the architecture of protocol and implementations. We present studies evaluating and optimizing Multipath TCP performance, and proposals and implementations of interfaces to the application layer. To finish this section, we explain the rule-based scheduler, a Multipath TCP packet scheduler, which makes its decisions based on script programs which are changeable during runtime, allowing us to evaluate different scheduling approaches faster.
 
@@ -390,7 +394,7 @@ behaving as a TCP flow in the network [as] an instantiation of the
 `network-oriented' Flow+Endpoint layer''. 
 It is acknowledged that at this layer end-to-end service can't be expected 
 as ``Middleboxes routinely interpose on the transport layer''.
-These compatibility is considered important to allow deploying it in the 
+This compatibility is considered important to allow deploying it in the 
 current Internet landscape.
 
 The ``\thinspace`application-oriented' Semantic layer'' of Multipath TCP provides ``
@@ -405,8 +409,8 @@ subflows between the peers; (b) packet scheduling, to split the octet stream
 into segments and decide on which subflow(s) to send each of them, and to 
 reassemble them upon receiving; (c) a subflow interface, to transmit packets 
 over a single path, in a way compatible with TCP; (d) shared congestion 
-control for all subflows of the same connection, to ensure sharing fairly 
-bandwidth at bottlenecks.  
+control for all subflows of the same connection, to ensure sharing 
+bandwidth fairly at bottlenecks.  
 
 In figure \ref{fig:mptcp-arch}, we illustrate how data flows through the 
 Multipath TCP transport layer components: the application produces a stream 
@@ -482,7 +486,7 @@ All aforementioned implementations are open source. There is also one known clos
 \centering
 		\begin{tabular}{p{3.5cm}p{5cm}} \toprule
 		Device Type    & Network Interfaces \\ \midrule
-		Smart phones & Wi-Fi and cellular \\
+		Smartphones & Wi-Fi and cellular \\
 		Notebooks & Wi-Fi, often Ethernet, sometimes cellular \\
 		Desktops & Ethernet and/or Wi-Fi \\
 		Servers & Ethernet (multiple) \\
@@ -958,7 +962,7 @@ First, we always look at a MPTCP connection which is established by the web brow
 %Nur der Client/Browser hat mehrere Interfaces / sendet MP JOIN Anfragen -> path-manager erstmal nicht relevant
 Only the client has two interfaces with different network addresses. After the connection is set up, it directly opens the second subflow by connecting to the server from the secondary interface with a \code{MP_JOIN} option in the \code{SYN}. The server has only one (visible) interface and accepts the second subflow. Therefore, we won't discuss different MPTCP path management algorithms.
 %Client hat zwei Interfaces (Wi-Fi und 3G)
-The client's interfaces are either Wi-Fi and 3G/LTE, as found on smart phones, or Ethernet and Wi-Fi, which is common for notebooks.
+The client's interfaces are either Wi-Fi and 3G/LTE, as found on smartphones, or Ethernet and Wi-Fi, which is common for notebooks.
 %Kontrollierbare Aspekte: 
 %	- Scheduler
 %	- TCP Flow Control/Congestion Control
@@ -1532,7 +1536,7 @@ identical to \code{fill_wb}.
 
 
 \begin{lstlisting}[style=C_Code,label=lst:nghttpd-fill_wb,caption={
-	Fetching and forwarding data and meta information (from 
+	Fetching and forwarding data and meta data (from 
 	\code{HttpServer.cc}, method \code{Http2Handler::fill_wb})
 },linebackgroundcolor={\lstLinesAdded{11-13,15-16}}]
     const uint8_t *data;
@@ -2151,7 +2155,7 @@ with schedulers which use application-provided hints.
 The goal of this evaluation is to test the implementation of content-type 
 specific scheduling, and to show a first content-type based optimization of 
 existing and modified web pages. The network situation is shown in Figure \ref
-{eva1-scenario}. A user surfs the web on a smart phone which is connected to 
+{eva1-scenario}. A user surfs the web on a smartphone which is connected to 
 a free Wi-Fi hotspot and a cellular network. The Wi-Fi routes the traffic 
 through a VPN and therefore incurs a high latency, but has acceptable 
 bandwidth and no traffic limit. In contrast, the cellular network has low 
@@ -2216,7 +2220,7 @@ and the aggressive reference scheduler, the time to first meaningful paint is
 the same, while saving a considerable amount of data volume on the cellular 
 connection. 
 Compared to using the high latency subflow as the only path, the
-schedulers which use multiple paths are faster by multiple seconds
+schedulers which use multiple paths are faster by multiple seconds.
 For the CNN article, the data volume saved is 4.6 MB per page load as shown 
 in figure \ref{eva1-rxbytes} and the speed up of the first meaningful 
 paint event is from 4.5 to 2.8 seconds.
@@ -2279,7 +2283,7 @@ paint event is from 4.5 to 2.8 seconds.
 
 
 To try our implementation in a real network, we set up a network environment 
-as described in Figure \ref{eva1-scenario}. Instead of a smart phone, we used 
+as described in Figure \ref{eva1-scenario}. Instead of a smartphone, we used 
 a notebook running Ubuntu Linux with the custom RBS kernel. It has two 
 independent internet uplinks: an LTE connection, using USB tethering over an 
 Android phone connected to Telefonica network in Darmstadt, Germany; and a 
@@ -2322,7 +2326,7 @@ paint and page load times are presented in Figure \ref{eva2-loadtimes-stacked}.
 	\caption{Mean page load times for Evaluation B }
 	\label{eva2-loadtimes-stacked}
 \end{subfigure}
-\caption{Evaluation B}
+\caption{Results of Evaluation B}
 \label{fig:eva2}
 \end{figure}
 
@@ -2377,7 +2381,7 @@ doesn't change with RTT ratio. Therefore, roughly the same amount of segments
 \begin{figure}
 \centering
 	\includegraphics[width=0.7\textwidth]{eva2-scat-rttRatio-dataRatio.pdf}
-	\caption{Subflow usage over RTT ratio}
+	\caption{Subflow usage over RTT ratio for Evaluation B}
 	\label{eva2-scat-rttRatio-dataRatio}
 \end{figure}
 
@@ -2414,7 +2418,7 @@ subflow.
 	\caption{Page Load Time}
 	\label{eva2-scat-rttRatio-loadEvent}
 \end{subfigure}
-\caption{Page timings changing with RTT ratio}
+\caption{Page timings changing with RTT ratio for Evaluation B}
 \label{fig:test}
 \end{figure}
 
@@ -2503,7 +2507,7 @@ might be another reason for the missing performance benefit of the redundancy.
 \begin{figure}
 \centering
 	\includegraphics[width=0.7\textwidth]{eva3-rxbytes.pdf}
-	\caption{Transferred data per subflow, for different schedulers}
+	\caption{Transferred data per subflow, for different schedulers, for Evaluation C}
 	\label{eva3-rxbytes}
 \end{figure}
 
@@ -2511,7 +2515,7 @@ might be another reason for the missing performance benefit of the redundancy.
 \begin{figure}
 \centering
 	\includegraphics[width=\textwidth]{eva3-loadtimes.pdf}
-	\caption{Timing metrics for different schedulers}
+	\caption{Timing metrics for different schedulers for Evaluation C}
 	\label{eva3-loadtimes}
 \end{figure}
 
@@ -2545,16 +2549,20 @@ might be another reason for the missing performance benefit of the redundancy.
 \chapter{Conclusion}
 %=====================================================================
 
-
 As the main result from our work, we found that multipath scheduling can profit from hints from the application.
-We found an exemplary network situation where the benefit is evident, as a performance improvement can be shown while minimizing additional bandwidth costs. 
-In evaluations A and B, we show speed-ups of 50\% compared to single path TCP, while only having 44\% of the bandwidth overhead of a comparable, not content-type aware scheduler.
+We found an exemplary network situation where the benefit is evident, as a performance improvement can be shown while minimizing additional data transfer costs. 
+In evaluations A and B, we show speed-ups of 50\% compared to single path TCP by offloading segments to a faster, but more expensive subflow. To achieve this, only 34\% of the data needs to be transmitted on the more expensive subflow with the content-aware scheduler, instead of 75\% with the non-content-aware reference scheduler. Therefore we halve the loading time with only 45\% of the extra cost.
+
 
 Based on the Nghttpd reference web server, we implemented cooperation of an application with the transport layer, and provide scheduler scripts to make use of scheduling hints passed by the server, allowing further experimentation with content-aware and other cooperative schedulers.
+To make cooperation-based scheduling more generally applicable, we need to select different scheduling algorithms depending on the network conditions. 
+In certain network scenarios, for example when available links are very heterogeneous, content-aware scheduling can make a difference in user-perceived performance. 
 
 %\todo{conclusion}
 
 \section{Outlook / Future Work}
+
+Below we point out possible approaches for future investigations in the field of application-aware multipath scheduling, including further evaluations and development necessary for practical application.
 
 %-------------------------------------------------------
 %client side
@@ -2577,6 +2585,7 @@ A heuristical approach without support from the browser might be good enough.
 In our evaluations, we only performed single page loads. One could look at the behavior for further loads, when the MPTCP, TLS and HTTP2 connection is already established. Again, dynamic sites which use AJAX requests could be interesting test objects for further measurements.
 % one could look at the behavior for further loads, when the MPTCP/TLS/HTTP2 connection is already established
 % also, dynamic sites use xhr requests after they have load - these can be performance critical (e.g. if triggered by user interaction and results should be displayed) or less so (e.g. tracking user clicks, or refresh stuff regularly in the background) 
+Furthermore, we only modified scheduling, but don't modify or block any resources, so the that web site is not changed or rendered unusable. Combining a compressing proxy or an ad blocker on the user side, can outweigh performance and 
 
 
 %-------------------------------------------------------
@@ -2585,27 +2594,18 @@ In our evaluations, we only performed single page loads. One could look at the b
 % ***Extension to three or more interfaces
 %\todo{Extension to three or more interfaces}
 Another area is extending the evaluations to three or more interfaces, and to multiple interfaces at the server, possibly allowing full meshed subflows.
-
 %-------------------------------------------------------
 %automated web site analysis
-
 % ***our work could be combined with :
 Some optimizations rely on manually providing resource priorities and dependencies to the web server. Our work could be combined with automated algorithms to determine dependency graphs of web pages and user relevancy ratings of resources as proposed by \textcite{klotski2015}.
-
 % - automated categorization of ressources/http requests
 %\todo{...}
-
 % - automated dependency graph
-
 %Automatische Einstufung von Seitenbestandteilen (HTTP Requests) in Relevanz / User Utility
 %-> nicht Thema der Arbeit, aber evtl. relevant für praktische Umsetzung
-
 %Automatisches Aufbauen von Dependency Graphs
-
-
 %-------------------------------------------------------
 %real web server
-
 % ***Porting to a ``real'' web server e.g. apache or nginx
 %\todo{Porting to a ``real'' web server e.g. apache or nginx}
 Finally, to use the optimizations in a real-world scenario, it is necessary to port our modifications to Nghttpd to a ``real'' web server like Apache HTTP Server or Nginx.
@@ -2619,6 +2619,7 @@ Finally, to use the optimizations in a real-world scenario, it is necessary to p
 %\nocite{*}
 %\chapter{Bibliography}
 %\bibliography{thesis-h2-mptcp}{}
+\pdfbookmark[0]{Bibliography}{Bibliography}
 \printbibliography
 
 
@@ -2694,7 +2695,7 @@ void prepare_response(Stream *stream, Http2Handler *hd, bool allow_push = true) 
 
 \chapter{Content Type and Cost Aware Scheduler}\label{annex-sched_eval_a}
 
-\begin{lstlisting}[style=RBS,label=lst:sched_eval_a,caption={RBS Scheduler Script for Evaluation A (``Bad Wi-Fi'')},numbers=left]
+\begin{lstlisting}[style=RBS,label=lst:sched_eval_a,caption={RBS Scheduler Script for Evaluation A and B},numbers=left]
 /*
  * This scheduler sends packets on the subflow with the lowest RTT which has congestion window available
  *  ... except images, they are sent only on the "cheap" (non-backup) subflow (e.g. Wi-Fi instead of 3G)
@@ -2735,7 +2736,7 @@ IF (!Q.EMPTY) {
 
 \chapter{Content-Based Redundant Scheduler}\label{annex-sched_eval_b}
 
-\begin{lstlisting}[style=RBS,label=lst:sched_eval_b,caption={RBS Scheduler Script for Evaluation C (``Lossy Wi-Fi'')},numbers=left]
+\begin{lstlisting}[style=RBS,label=lst:sched_eval_b,caption={RBS Scheduler Script for Evaluation C},numbers=left]
 /*
  * send packets redundant if skb user property is set
 */
